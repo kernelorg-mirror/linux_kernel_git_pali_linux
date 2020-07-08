@@ -17,6 +17,7 @@
 #include <linux/timer.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/workqueue.h>
 #include <linux/pci.h>
 #include <linux/pci-ecam.h>
 #include <linux/init.h>
@@ -297,6 +298,8 @@ struct advk_pcie {
 	struct gpio_desc *reset_gpio;
 	struct phy *phy;
 	struct timer_list link_irq_timer;
+	struct delayed_work probe_card_work;
+	bool host_bridge_probed;
 };
 
 static inline void advk_writel(struct advk_pcie *pcie, u32 val, u64 reg)
@@ -487,6 +490,19 @@ static void advk_pcie_train_link(struct advk_pcie *pcie)
 		dev_err(dev, "link never came up\n");
 	else
 		dev_info(dev, "link up\n");
+}
+
+static void advk_pcie_probe_card_work(struct work_struct *work)
+{
+	struct delayed_work *dwork = container_of(work, struct delayed_work, work);
+	struct advk_pcie *pcie = container_of(dwork, struct advk_pcie, probe_card_work);
+	struct pci_host_bridge *bridge = pci_host_bridge_from_priv(pcie);
+	int ret;
+
+	advk_pcie_train_link(pcie);
+	ret = pci_host_probe(bridge);
+	if (ret == 0)
+		pcie->host_bridge_probed = true;
 }
 
 /*
@@ -696,8 +712,6 @@ static void advk_pcie_setup_hw(struct advk_pcie *pcie)
 	/* Disable remaining PCIe outbound windows */
 	for (i = pcie->wins_count; i < OB_WIN_COUNT; i++)
 		advk_pcie_disable_ob_win(pcie, i);
-
-	advk_pcie_train_link(pcie);
 }
 
 static int advk_pcie_check_pio_status(struct advk_pcie *pcie, bool allow_crs, u32 *val)
@@ -2086,14 +2100,8 @@ static int advk_pcie_probe(struct platform_device *pdev)
 	bridge->ops = &advk_pcie_ops;
 	bridge->map_irq = advk_pcie_map_irq;
 
-	ret = pci_host_probe(bridge);
-	if (ret < 0) {
-		advk_pcie_remove_emul_irq_domain(pcie);
-		advk_pcie_remove_msi_irq_domain(pcie);
-		advk_pcie_remove_irq_domain(pcie);
-		irq_set_chained_handler_and_data(pcie->irq, NULL, NULL);
-		return ret;
-	}
+	INIT_DELAYED_WORK(&pcie->probe_card_work, advk_pcie_probe_card_work);
+	schedule_delayed_work(&pcie->probe_card_work, 1);
 
 	return 0;
 }
@@ -2105,11 +2113,15 @@ static int advk_pcie_remove(struct platform_device *pdev)
 	u32 val;
 	int i;
 
+	cancel_delayed_work_sync(&pcie->probe_card_work);
+
 	/* Remove PCI bus with all devices */
-	pci_lock_rescan_remove();
-	pci_stop_root_bus(bridge->bus);
-	pci_remove_root_bus(bridge->bus);
-	pci_unlock_rescan_remove();
+	if (pcie->host_bridge_probed) {
+		pci_lock_rescan_remove();
+		pci_stop_root_bus(bridge->bus);
+		pci_remove_root_bus(bridge->bus);
+		pci_unlock_rescan_remove();
+	}
 
 	/* Disable Root Bridge I/O space, memory space and bus mastering */
 	val = advk_readl(pcie, PCIE_CORE_CMD_STATUS_REG);
