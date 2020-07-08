@@ -423,10 +423,19 @@ static void advk_pcie_issue_perst(struct advk_pcie *pcie)
 	if (!pcie->reset_gpio)
 		return;
 
-	/* 10ms delay is needed for some cards */
-	dev_info(&pcie->pdev->dev, "issuing PERST via reset GPIO for 10ms\n");
-	gpiod_set_value_cansleep(pcie->reset_gpio, 1);
-	usleep_range(10000, 11000);
+	/*
+	 * Some PCIe cards are not detected after reboot when PERST# signal was
+	 * already de-asserted prior driver initialization. In this case assert
+	 * PERST# signal for at least 10ms (1ms is not enough for some cards)
+	 * which triggers card reset.
+	 */
+	if (!gpiod_get_value(pcie->reset_gpio)) {
+		dev_info(&pcie->pdev->dev, "asserting PERST# signal via reset GPIO for 10ms\n");
+		gpiod_set_value_cansleep(pcie->reset_gpio, 1);
+		usleep_range(10000, 11000);
+	}
+
+	/* De-assert PERST# signal which prepares PCIe card for power up */
 	gpiod_set_value_cansleep(pcie->reset_gpio, 0);
 }
 
@@ -2023,9 +2032,17 @@ static int advk_pcie_probe(struct platform_device *pdev)
 	if (pcie->irq < 0)
 		return pcie->irq;
 
+	/*
+	 * GPIOD_OUT_LOW flag automatically changes GPIO state at probe time to
+	 * output low which automatically de-asserts PERST# signal. We need to
+	 * reset PCIe card via PERST# signal, so do not change GPIO state at the
+	 * probe time and let advk_pcie_issue_perst() to handle it. Usage of
+	 * GPIOD_FLAGS_BIT_DIR_OUT flag avoids flipping GPIO state more times
+	 * during advk_pcie_probe() function.
+	 */
 	pcie->reset_gpio = devm_gpiod_get_from_of_node(dev, dev->of_node,
 						       "reset-gpios", 0,
-						       GPIOD_OUT_LOW,
+						       GPIOD_FLAGS_BIT_DIR_OUT,
 						       "pcie1-reset");
 	ret = PTR_ERR_OR_ZERO(pcie->reset_gpio);
 	if (ret) {
