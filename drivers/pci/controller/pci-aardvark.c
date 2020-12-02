@@ -66,11 +66,10 @@
 #define PCIE_CORE_CTRL0_REG			(CONTROL_BASE_ADDR + 0x0)
 #define     PCIE_GEN_SEL_MSK			0x3
 #define     PCIE_GEN_SEL_SHIFT			0x0
-#define     SPEED_GEN_1				0
-#define     SPEED_GEN_2				1
-#define     SPEED_GEN_3				2
-#define     IS_RC_MSK				1
-#define     IS_RC_SHIFT				2
+#define     SPEED_GEN_1				(0 << PCIE_GEN_SEL_SHIFT)
+#define     SPEED_GEN_2				(1 << PCIE_GEN_SEL_SHIFT)
+#define     SPEED_GEN_3				(2 << PCIE_GEN_SEL_SHIFT)
+#define     IS_RC				BIT(2)
 #define     LANE_CNT_MSK			0x18
 #define     LANE_CNT_SHIFT			0x3
 #define     LANE_COUNT_1			(0 << LANE_CNT_SHIFT)
@@ -95,15 +94,15 @@
 #define     PCIE_CORE_REF_CLK_RX_ENABLE		BIT(2)
 #define PCIE_MSG_LOG_REG			(CONTROL_BASE_ADDR + 0x30)
 #define PCIE_ISR0_REG				(CONTROL_BASE_ADDR + 0x40)
-#define PCIE_MSG_PM_PME_MASK			BIT(7)
 #define PCIE_ISR0_MASK_REG			(CONTROL_BASE_ADDR + 0x44)
-#define     PCIE_ISR0_MSI_INT_PENDING		BIT(24)
 #define     PCIE_ISR0_LINK_DOWN			BIT(1)
+#define     PCIE_ISR0_MSG_PM_PME		BIT(7)
 #define     PCIE_ISR0_CORR_ERR			BIT(11)
 #define     PCIE_ISR0_NFAT_ERR			BIT(12)
 #define     PCIE_ISR0_FAT_ERR			BIT(13)
 #define     PCIE_ISR0_INTX_ASSERT(val)		BIT(16 + (val))
 #define     PCIE_ISR0_INTX_DEASSERT(val)	BIT(20 + (val))
+#define     PCIE_ISR0_MSI_INT			BIT(24)
 #define     PCIE_ISR0_ERR_MASK			(PCIE_ISR0_CORR_ERR | PCIE_ISR0_NFAT_ERR | PCIE_ISR0_FAT_ERR)
 #define     PCIE_ISR0_ALL_MASK			GENMASK(31, 0)
 #define PCIE_ISR1_REG				(CONTROL_BASE_ADDR + 0x48)
@@ -544,7 +543,7 @@ static void advk_pcie_setup_hw(struct advk_pcie *pcie)
 
 	/* Set PCI global control register to RC mode */
 	reg = advk_readl(pcie, PCIE_CORE_CTRL0_REG);
-	reg |= (IS_RC_MSK << IS_RC_SHIFT);
+	reg |= IS_RC;
 	advk_writel(pcie, reg, PCIE_CORE_CTRL0_REG);
 
 	/*
@@ -598,8 +597,8 @@ static void advk_pcie_setup_hw(struct advk_pcie *pcie)
 	advk_writel(pcie, reg, PCIE_CORE_PCIEXP_CAP + PCI_EXP_DEVCTL);
 
 	/* Program PCIe Control 2 to disable strict ordering */
-	reg = PCIE_CORE_CTRL2_RESERVED |
-		PCIE_CORE_CTRL2_TD_ENABLE;
+	reg = advk_readl(pcie, PCIE_CORE_CTRL2_REG);
+	reg &= ~PCIE_CORE_CTRL2_STRICT_ORDER_ENABLE;
 	advk_writel(pcie, reg, PCIE_CORE_CTRL2_REG);
 
 	/* Disable ordering checks, workaround for erratum 3.12 "PCIe completion timeout" */
@@ -636,7 +635,7 @@ static void advk_pcie_setup_hw(struct advk_pcie *pcie)
 
 	/* Unmask summary MSI interrupt */
 	reg = advk_readl(pcie, PCIE_ISR0_MASK_REG);
-	reg &= ~PCIE_ISR0_MSI_INT_PENDING;
+	reg &= ~PCIE_ISR0_MSI_INT;
 	advk_writel(pcie, reg, PCIE_ISR0_MASK_REG);
 
 	/* Unmask Link Down interrupt */
@@ -646,7 +645,7 @@ static void advk_pcie_setup_hw(struct advk_pcie *pcie)
 
 	/* Unmask PME interrupt for processing of PME requester */
 	reg = advk_readl(pcie, PCIE_ISR0_MASK_REG);
-	reg &= ~PCIE_MSG_PM_PME_MASK;
+	reg &= ~PCIE_ISR0_MSG_PM_PME;
 	advk_writel(pcie, reg, PCIE_ISR0_MASK_REG);
 
 	/* Enable summary interrupt for GIC SPI source */
@@ -1670,8 +1669,7 @@ static void advk_pcie_handle_msi(struct advk_pcie *pcie)
 			dev_err_ratelimited(&pcie->pdev->dev, "unexpected MSI 0x%02x\n", msi_idx);
 	}
 
-	advk_writel(pcie, PCIE_ISR0_MSI_INT_PENDING,
-		    PCIE_ISR0_REG);
+	advk_writel(pcie, PCIE_ISR0_MSI_INT, PCIE_ISR0_REG);
 }
 
 static void advk_pcie_handle_int(struct advk_pcie *pcie)
@@ -1693,8 +1691,8 @@ static void advk_pcie_handle_int(struct advk_pcie *pcie)
 		return;
 
 	/* Process PME interrupt as the first one to do not miss PME requester id */
-	if (isr0_status & PCIE_MSG_PM_PME_MASK) {
-		advk_writel(pcie, PCIE_MSG_PM_PME_MASK, PCIE_ISR0_REG);
+	if (isr0_status & PCIE_ISR0_MSG_PM_PME) {
+		advk_writel(pcie, PCIE_ISR0_MSG_PM_PME, PCIE_ISR0_REG);
 		/*
 		 * PCIE_MSG_LOG_REG contains the last inbound message,
 		 * so store requester id only when PME was not asserted yet.
@@ -1739,7 +1737,7 @@ static void advk_pcie_handle_int(struct advk_pcie *pcie)
 	}
 
 	/* Process MSI interrupts */
-	if (isr0_status & PCIE_ISR0_MSI_INT_PENDING)
+	if (isr0_status & PCIE_ISR0_MSI_INT)
 		advk_pcie_handle_msi(pcie);
 
 	/* Process legacy interrupts */
