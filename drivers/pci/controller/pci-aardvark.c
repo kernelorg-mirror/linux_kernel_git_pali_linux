@@ -37,11 +37,6 @@
 #define PCIE_CORE_EXP_ROM_BAR_REG				0x30
 #define PCIE_CORE_PCIEXP_CAP					0xc0
 #define PCIE_CORE_PCIERR_CAP					0x100
-#define PCIE_CORE_ERR_CAPCTL_REG				0x118
-#define     PCIE_CORE_ERR_CAPCTL_ECRC_CHK_TX			BIT(5)
-#define     PCIE_CORE_ERR_CAPCTL_ECRC_CHK_TX_EN			BIT(6)
-#define     PCIE_CORE_ERR_CAPCTL_ECRC_CHCK			BIT(7)
-#define     PCIE_CORE_ERR_CAPCTL_ECRC_CHCK_RCV			BIT(8)
 #define     PCIE_CORE_INT_A_ASSERT_ENABLE			1
 #define     PCIE_CORE_INT_B_ASSERT_ENABLE			2
 #define     PCIE_CORE_INT_C_ASSERT_ENABLE			3
@@ -590,12 +585,10 @@ static void advk_pcie_setup_hw(struct advk_pcie *pcie)
 	reg &= ~(PCI_COMMAND_IO | PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER);
 	advk_writel(pcie, reg, PCIE_CORE_CMD_STATUS_REG);
 
-	/* Set Advanced Error Capabilities and Control PF0 register */
-	reg = PCIE_CORE_ERR_CAPCTL_ECRC_CHK_TX |
-		PCIE_CORE_ERR_CAPCTL_ECRC_CHK_TX_EN |
-		PCIE_CORE_ERR_CAPCTL_ECRC_CHCK |
-		PCIE_CORE_ERR_CAPCTL_ECRC_CHCK_RCV;
-	advk_writel(pcie, reg, PCIE_CORE_ERR_CAPCTL_REG);
+	/* Enable generation and checking of ECRC on Root Bridge */
+	reg = advk_readl(pcie, PCIE_CORE_PCIERR_CAP + PCI_ERR_CAP);
+	reg |= PCI_ERR_CAP_ECRC_GENE | PCI_ERR_CAP_ECRC_CHKE;
+	advk_writel(pcie, reg, PCIE_CORE_PCIERR_CAP + PCI_ERR_CAP);
 
 	/* Set PCIe Device Control register */
 	reg = advk_readl(pcie, PCIE_CORE_PCIEXP_CAP + PCI_EXP_DEVCTL);
