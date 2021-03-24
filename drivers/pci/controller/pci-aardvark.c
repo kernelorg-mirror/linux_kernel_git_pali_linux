@@ -431,42 +431,42 @@ static void advk_pcie_issue_perst(struct advk_pcie *pcie)
 static void advk_pcie_train_link(struct advk_pcie *pcie)
 {
 	struct device *dev = &pcie->pdev->dev;
-	u32 reg;
+	u32 val;
 	int ret;
 
 	/*
 	 * Setup PCIe rev / gen compliance based on device tree property
 	 * 'max-link-speed' which also forces maximal link speed.
 	 */
-	reg = advk_readl(pcie, PCIE_CORE_CTRL0_REG);
-	reg &= ~PCIE_GEN_SEL_MSK;
+	val = advk_readl(pcie, PCIE_CORE_CTRL0_REG);
+	val &= ~PCIE_GEN_SEL_MSK;
 	if (pcie->link_gen == 3)
-		reg |= SPEED_GEN_3;
+		val |= SPEED_GEN_3;
 	else if (pcie->link_gen == 2)
-		reg |= SPEED_GEN_2;
+		val |= SPEED_GEN_2;
 	else
-		reg |= SPEED_GEN_1;
-	advk_writel(pcie, reg, PCIE_CORE_CTRL0_REG);
+		val |= SPEED_GEN_1;
+	advk_writel(pcie, val, PCIE_CORE_CTRL0_REG);
 
 	/*
 	 * Set maximal link speed value also into PCIe Link Control 2 register.
 	 * Armada 3700 Functional Specification says that default value is based
 	 * on SPEED_GEN but tests showed that default value is always 8.0 GT/s.
 	 */
-	reg = advk_readl(pcie, PCIE_CORE_PCIEXP_CAP + PCI_EXP_LNKCTL2);
-	reg &= ~PCI_EXP_LNKCTL2_TLS;
+	val = advk_readl(pcie, PCIE_CORE_PCIEXP_CAP + PCI_EXP_LNKCTL2);
+	val &= ~PCI_EXP_LNKCTL2_TLS;
 	if (pcie->link_gen == 3)
-		reg |= PCI_EXP_LNKCTL2_TLS_8_0GT;
+		val |= PCI_EXP_LNKCTL2_TLS_8_0GT;
 	else if (pcie->link_gen == 2)
-		reg |= PCI_EXP_LNKCTL2_TLS_5_0GT;
+		val |= PCI_EXP_LNKCTL2_TLS_5_0GT;
 	else
-		reg |= PCI_EXP_LNKCTL2_TLS_2_5GT;
-	advk_writel(pcie, reg, PCIE_CORE_PCIEXP_CAP + PCI_EXP_LNKCTL2);
+		val |= PCI_EXP_LNKCTL2_TLS_2_5GT;
+	advk_writel(pcie, val, PCIE_CORE_PCIEXP_CAP + PCI_EXP_LNKCTL2);
 
 	/* Enable link training after selecting PCIe generation */
-	reg = advk_readl(pcie, PCIE_CORE_CTRL0_REG);
-	reg |= LINK_TRAINING_EN;
-	advk_writel(pcie, reg, PCIE_CORE_CTRL0_REG);
+	val = advk_readl(pcie, PCIE_CORE_CTRL0_REG);
+	val |= LINK_TRAINING_EN;
+	advk_writel(pcie, val, PCIE_CORE_CTRL0_REG);
 
 	/*
 	 * Reset PCIe card via PERST# signal. Some cards are not detected
@@ -537,7 +537,7 @@ static void advk_pcie_disable_ob_win(struct advk_pcie *pcie, u8 win_num)
 static void advk_pcie_setup_hw(struct advk_pcie *pcie)
 {
 	phys_addr_t msi_addr;
-	u32 reg;
+	u32 val;
 	int i;
 
 	/*
@@ -546,21 +546,21 @@ static void advk_pcie_setup_hw(struct advk_pcie *pcie)
 	 * Reference clock differential signal off-chip and disable
 	 * receiving off-chip differential signal.
 	 */
-	reg = advk_readl(pcie, PCIE_CORE_REF_CLK_REG);
-	reg |= PCIE_CORE_REF_CLK_TX_ENABLE;
-	reg &= ~PCIE_CORE_REF_CLK_RX_ENABLE;
-	advk_writel(pcie, reg, PCIE_CORE_REF_CLK_REG);
+	val = advk_readl(pcie, PCIE_CORE_REF_CLK_REG);
+	val |= PCIE_CORE_REF_CLK_TX_ENABLE;
+	val &= ~PCIE_CORE_REF_CLK_RX_ENABLE;
+	advk_writel(pcie, val, PCIE_CORE_REF_CLK_REG);
 
 	/* Set to Direct mode */
-	reg = advk_readl(pcie, CTRL_CONFIG_REG);
-	reg &= ~(CTRL_MODE_MASK << CTRL_MODE_SHIFT);
-	reg |= ((PCIE_CORE_MODE_DIRECT & CTRL_MODE_MASK) << CTRL_MODE_SHIFT);
-	advk_writel(pcie, reg, CTRL_CONFIG_REG);
+	val = advk_readl(pcie, CTRL_CONFIG_REG);
+	val &= ~(CTRL_MODE_MASK << CTRL_MODE_SHIFT);
+	val |= ((PCIE_CORE_MODE_DIRECT & CTRL_MODE_MASK) << CTRL_MODE_SHIFT);
+	advk_writel(pcie, val, CTRL_CONFIG_REG);
 
 	/* Set PCI global control register to RC mode */
-	reg = advk_readl(pcie, PCIE_CORE_CTRL0_REG);
-	reg |= IS_RC;
-	advk_writel(pcie, reg, PCIE_CORE_CTRL0_REG);
+	val = advk_readl(pcie, PCIE_CORE_CTRL0_REG);
+	val |= IS_RC;
+	advk_writel(pcie, val, PCIE_CORE_CTRL0_REG);
 
 	/*
 	 * Replace incorrect PCI vendor id value 0x1b4b by correct value 0x11ab.
@@ -569,8 +569,8 @@ static void advk_pcie_setup_hw(struct advk_pcie *pcie)
 	 * read-only vendor id bits in PCIE_CORE_DEV_ID_REG register. Workaround
 	 * for erratum 4.1: "The value of device and vendor ID is incorrect".
 	 */
-	reg = (PCI_VENDOR_ID_MARVELL << 16) | PCI_VENDOR_ID_MARVELL;
-	advk_writel(pcie, reg, VENDOR_ID_REG);
+	val = (PCI_VENDOR_ID_MARVELL << 16) | PCI_VENDOR_ID_MARVELL;
+	advk_writel(pcie, val, VENDOR_ID_REG);
 
 	/*
 	 * Change Class Code of PCI Bridge device to PCI Bridge (0x600400)
@@ -587,46 +587,46 @@ static void advk_pcie_setup_hw(struct advk_pcie *pcie)
 	 * access to configuration space via internal aardvark registers or
 	 * emulated configuration buffer.
 	 */
-	reg = advk_readl(pcie, PCIE_CORE_DEV_REV_REG);
-	reg &= ~0xffffff00;
-	reg |= (PCI_CLASS_BRIDGE_PCI << 8) << 8;
-	advk_writel(pcie, reg, PCIE_CORE_DEV_REV_REG);
+	val = advk_readl(pcie, PCIE_CORE_DEV_REV_REG);
+	val &= ~0xffffff00;
+	val |= (PCI_CLASS_BRIDGE_PCI << 8) << 8;
+	advk_writel(pcie, val, PCIE_CORE_DEV_REV_REG);
 
 	/* Disable Root Bridge I/O space, memory space and bus mastering */
-	reg = advk_readl(pcie, PCIE_CORE_CMD_STATUS_REG);
-	reg &= ~(PCI_COMMAND_IO | PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER);
-	advk_writel(pcie, reg, PCIE_CORE_CMD_STATUS_REG);
+	val = advk_readl(pcie, PCIE_CORE_CMD_STATUS_REG);
+	val &= ~(PCI_COMMAND_IO | PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER);
+	advk_writel(pcie, val, PCIE_CORE_CMD_STATUS_REG);
 
 	/* Enable generation and checking of ECRC on Root Bridge */
-	reg = advk_readl(pcie, PCIE_CORE_PCIERR_CAP + PCI_ERR_CAP);
-	reg |= PCI_ERR_CAP_ECRC_GENE | PCI_ERR_CAP_ECRC_CHKE;
-	advk_writel(pcie, reg, PCIE_CORE_PCIERR_CAP + PCI_ERR_CAP);
+	val = advk_readl(pcie, PCIE_CORE_PCIERR_CAP + PCI_ERR_CAP);
+	val |= PCI_ERR_CAP_ECRC_GENE | PCI_ERR_CAP_ECRC_CHKE;
+	advk_writel(pcie, val, PCIE_CORE_PCIERR_CAP + PCI_ERR_CAP);
 
 	/* Set PCIe Device Control register */
-	reg = advk_readl(pcie, PCIE_CORE_PCIEXP_CAP + PCI_EXP_DEVCTL);
-	reg &= ~PCI_EXP_DEVCTL_RELAX_EN;
-	reg &= ~PCI_EXP_DEVCTL_NOSNOOP_EN;
-	reg &= ~PCI_EXP_DEVCTL_PAYLOAD;
-	reg &= ~PCI_EXP_DEVCTL_READRQ;
-	reg |= PCI_EXP_DEVCTL_PAYLOAD_512B;
-	reg |= PCI_EXP_DEVCTL_READRQ_512B;
-	advk_writel(pcie, reg, PCIE_CORE_PCIEXP_CAP + PCI_EXP_DEVCTL);
+	val = advk_readl(pcie, PCIE_CORE_PCIEXP_CAP + PCI_EXP_DEVCTL);
+	val &= ~PCI_EXP_DEVCTL_RELAX_EN;
+	val &= ~PCI_EXP_DEVCTL_NOSNOOP_EN;
+	val &= ~PCI_EXP_DEVCTL_PAYLOAD;
+	val &= ~PCI_EXP_DEVCTL_READRQ;
+	val |= PCI_EXP_DEVCTL_PAYLOAD_512B;
+	val |= PCI_EXP_DEVCTL_READRQ_512B;
+	advk_writel(pcie, val, PCIE_CORE_PCIEXP_CAP + PCI_EXP_DEVCTL);
 
 	/* Program PCIe Control 2 to disable strict ordering */
-	reg = advk_readl(pcie, PCIE_CORE_CTRL2_REG);
-	reg &= ~PCIE_CORE_CTRL2_STRICT_ORDER_ENABLE;
-	advk_writel(pcie, reg, PCIE_CORE_CTRL2_REG);
+	val = advk_readl(pcie, PCIE_CORE_CTRL2_REG);
+	val &= ~PCIE_CORE_CTRL2_STRICT_ORDER_ENABLE;
+	advk_writel(pcie, val, PCIE_CORE_CTRL2_REG);
 
 	/* Disable ordering checks, workaround for erratum 3.12 "PCIe completion timeout" */
-	reg = advk_readl(pcie, DEBUG_MUX_CTRL_REG);
-	reg |= DIS_ORD_CHK;
-	advk_writel(pcie, reg, DEBUG_MUX_CTRL_REG);
+	val = advk_readl(pcie, DEBUG_MUX_CTRL_REG);
+	val |= DIS_ORD_CHK;
+	advk_writel(pcie, val, DEBUG_MUX_CTRL_REG);
 
 	/* Set lane X1 */
-	reg = advk_readl(pcie, PCIE_CORE_CTRL0_REG);
-	reg &= ~LANE_CNT_MSK;
-	reg |= LANE_COUNT_1;
-	advk_writel(pcie, reg, PCIE_CORE_CTRL0_REG);
+	val = advk_readl(pcie, PCIE_CORE_CTRL0_REG);
+	val &= ~LANE_CNT_MSK;
+	val |= LANE_COUNT_1;
+	advk_writel(pcie, val, PCIE_CORE_CTRL0_REG);
 
 	/* Set MSI address */
 	msi_addr = virt_to_phys(pcie);
@@ -634,9 +634,9 @@ static void advk_pcie_setup_hw(struct advk_pcie *pcie)
 	advk_writel(pcie, upper_32_bits(msi_addr), PCIE_MSI_ADDR_HIGH_REG);
 
 	/* Enable MSI */
-	reg = advk_readl(pcie, PCIE_CORE_CTRL2_REG);
-	reg |= PCIE_CORE_CTRL2_MSI_ENABLE;
-	advk_writel(pcie, reg, PCIE_CORE_CTRL2_REG);
+	val = advk_readl(pcie, PCIE_CORE_CTRL2_REG);
+	val |= PCIE_CORE_CTRL2_MSI_ENABLE;
+	advk_writel(pcie, val, PCIE_CORE_CTRL2_REG);
 
 	/* Clear all interrupts */
 	advk_writel(pcie, PCIE_MSI_ALL_MASK, PCIE_MSI_STATUS_REG);
@@ -650,23 +650,23 @@ static void advk_pcie_setup_hw(struct advk_pcie *pcie)
 	advk_writel(pcie, PCIE_MSI_ALL_MASK, PCIE_MSI_MASK_REG);
 
 	/* Unmask summary MSI interrupt */
-	reg = advk_readl(pcie, PCIE_ISR0_MASK_REG);
-	reg &= ~PCIE_ISR0_MSI_INT;
-	advk_writel(pcie, reg, PCIE_ISR0_MASK_REG);
+	val = advk_readl(pcie, PCIE_ISR0_MASK_REG);
+	val &= ~PCIE_ISR0_MSI_INT;
+	advk_writel(pcie, val, PCIE_ISR0_MASK_REG);
 
 	/* Unmask Link Down interrupt */
-	reg = advk_readl(pcie, PCIE_ISR0_MASK_REG);
-	reg &= ~PCIE_ISR0_LINK_DOWN;
-	advk_writel(pcie, reg, PCIE_ISR0_MASK_REG);
+	val = advk_readl(pcie, PCIE_ISR0_MASK_REG);
+	val &= ~PCIE_ISR0_LINK_DOWN;
+	advk_writel(pcie, val, PCIE_ISR0_MASK_REG);
 
 	/* Unmask PME interrupt for processing of PME requester */
-	reg = advk_readl(pcie, PCIE_ISR0_MASK_REG);
-	reg &= ~PCIE_ISR0_MSG_PM_PME;
-	advk_writel(pcie, reg, PCIE_ISR0_MASK_REG);
+	val = advk_readl(pcie, PCIE_ISR0_MASK_REG);
+	val &= ~PCIE_ISR0_MSG_PM_PME;
+	advk_writel(pcie, val, PCIE_ISR0_MASK_REG);
 
 	/* Enable summary interrupt for GIC SPI source */
-	reg = PCIE_IRQ_ALL_MASK & (~PCIE_IRQ_ENABLE_INTS_MASK);
-	advk_writel(pcie, reg, HOST_CTRL_INT_MASK_REG);
+	val = PCIE_IRQ_ALL_MASK & (~PCIE_IRQ_ENABLE_INTS_MASK);
+	advk_writel(pcie, val, HOST_CTRL_INT_MASK_REG);
 
 	/*
 	 * Enable AXI address window location generation:
@@ -678,9 +678,9 @@ static void advk_pcie_setup_hw(struct advk_pcie *pcie)
 	 * access when default outbound window configuration
 	 * is set for memory access.
 	 */
-	reg = advk_readl(pcie, PCIE_CORE_CTRL2_REG);
-	reg |= PCIE_CORE_CTRL2_OB_WIN_ENABLE;
-	advk_writel(pcie, reg, PCIE_CORE_CTRL2_REG);
+	val = advk_readl(pcie, PCIE_CORE_CTRL2_REG);
+	val |= PCIE_CORE_CTRL2_OB_WIN_ENABLE;
+	advk_writel(pcie, val, PCIE_CORE_CTRL2_REG);
 
 	/*
 	 * Set memory access in Default User Field so it
@@ -695,9 +695,9 @@ static void advk_pcie_setup_hw(struct advk_pcie *pcie)
 	 * info over AXI interface by PIO registers, the
 	 * address window is not required.
 	 */
-	reg = advk_readl(pcie, PIO_CTRL);
-	reg |= PIO_CTRL_ADDR_WIN_DISABLE;
-	advk_writel(pcie, reg, PIO_CTRL);
+	val = advk_readl(pcie, PIO_CTRL);
+	val |= PIO_CTRL_ADDR_WIN_DISABLE;
+	advk_writel(pcie, val, PIO_CTRL);
 
 	/*
 	 * Configure PCIe address windows for non-memory or
@@ -717,13 +717,13 @@ static void advk_pcie_setup_hw(struct advk_pcie *pcie)
 static int advk_pcie_check_pio_status(struct advk_pcie *pcie, bool allow_crs, u32 *val)
 {
 	struct device *dev = &pcie->pdev->dev;
-	u32 reg;
+	u32 stat;
 	unsigned int status;
 	char *strcomp_status, *str_posted;
 	int ret;
 
-	reg = advk_readl(pcie, PIO_STAT);
-	status = (reg & PIO_COMPLETION_STATUS_MASK) >>
+	stat = advk_readl(pcie, PIO_STAT);
+	status = (stat & PIO_COMPLETION_STATUS_MASK) >>
 		PIO_COMPLETION_STATUS_SHIFT;
 
 	/*
@@ -743,7 +743,7 @@ static int advk_pcie_check_pio_status(struct advk_pcie *pcie, bool allow_crs, u3
 	 */
 	switch (status) {
 	case PIO_COMPLETION_STATUS_OK:
-		if (reg & PIO_ERR_STATUS) {
+		if (stat & PIO_ERR_STATUS) {
 			strcomp_status = "COMP_ERR";
 			ret = -EFAULT;
 			break;
@@ -810,13 +810,13 @@ static int advk_pcie_check_pio_status(struct advk_pcie *pcie, bool allow_crs, u3
 	if (!strcomp_status)
 		return ret;
 
-	if (reg & PIO_NON_POSTED_REQ)
+	if (stat & PIO_NON_POSTED_REQ)
 		str_posted = "Non-posted";
 	else
 		str_posted = "Posted";
 
 	dev_dbg(dev, "%s PIO Response Status: %s, %#x @ %#x\n",
-		str_posted, strcomp_status, reg, advk_readl(pcie, PIO_ADDR_LS));
+		str_posted, strcomp_status, stat, advk_readl(pcie, PIO_ADDR_LS));
 
 	return ret;
 }
@@ -1219,7 +1219,7 @@ static int advk_pcie_rd_conf(struct pci_bus *bus, u32 devfn,
 	struct advk_pcie *pcie = bus->sysdata;
 	int retry_count;
 	bool allow_crs;
-	u32 reg;
+	u32 ctrl, addr;
 	int ret;
 
 	if (!advk_pcie_valid_device(pcie, bus, devfn)) {
@@ -1254,17 +1254,17 @@ static int advk_pcie_rd_conf(struct pci_bus *bus, u32 devfn,
 	}
 
 	/* Program the control register */
-	reg = advk_readl(pcie, PIO_CTRL);
-	reg &= ~PIO_CTRL_TYPE_MASK;
+	ctrl = advk_readl(pcie, PIO_CTRL);
+	ctrl &= ~PIO_CTRL_TYPE_MASK;
 	if (pci_is_root_bus(bus->parent))
-		reg |= PCIE_CONFIG_RD_TYPE0;
+		ctrl |= PCIE_CONFIG_RD_TYPE0;
 	else
-		reg |= PCIE_CONFIG_RD_TYPE1;
-	advk_writel(pcie, reg, PIO_CTRL);
+		ctrl |= PCIE_CONFIG_RD_TYPE1;
+	advk_writel(pcie, ctrl, PIO_CTRL);
 
 	/* Program the address registers */
-	reg = ALIGN_DOWN(PCIE_ECAM_OFFSET(bus->number, devfn, where), 4);
-	advk_writel(pcie, reg, PIO_ADDR_LS);
+	addr = ALIGN_DOWN(PCIE_ECAM_OFFSET(bus->number, devfn, where), 4);
+	advk_writel(pcie, addr, PIO_ADDR_LS);
 	advk_writel(pcie, 0, PIO_ADDR_MS);
 
 	/* Program the data strobe */
@@ -1314,7 +1314,7 @@ static int advk_pcie_wr_conf(struct pci_bus *bus, u32 devfn,
 				int where, int size, u32 val)
 {
 	struct advk_pcie *pcie = bus->sysdata;
-	u32 reg;
+	u32 ctrl, addr, data;
 	u32 data_strobe = 0x0;
 	int retry_count;
 	int offset;
@@ -1334,26 +1334,26 @@ static int advk_pcie_wr_conf(struct pci_bus *bus, u32 devfn,
 		return PCIBIOS_SET_FAILED;
 
 	/* Program the control register */
-	reg = advk_readl(pcie, PIO_CTRL);
-	reg &= ~PIO_CTRL_TYPE_MASK;
+	ctrl = advk_readl(pcie, PIO_CTRL);
+	ctrl &= ~PIO_CTRL_TYPE_MASK;
 	if (pci_is_root_bus(bus->parent))
-		reg |= PCIE_CONFIG_WR_TYPE0;
+		ctrl |= PCIE_CONFIG_WR_TYPE0;
 	else
-		reg |= PCIE_CONFIG_WR_TYPE1;
-	advk_writel(pcie, reg, PIO_CTRL);
+		ctrl |= PCIE_CONFIG_WR_TYPE1;
+	advk_writel(pcie, ctrl, PIO_CTRL);
 
 	/* Program the address registers */
-	reg = ALIGN_DOWN(PCIE_ECAM_OFFSET(bus->number, devfn, where), 4);
-	advk_writel(pcie, reg, PIO_ADDR_LS);
+	addr = ALIGN_DOWN(PCIE_ECAM_OFFSET(bus->number, devfn, where), 4);
+	advk_writel(pcie, addr, PIO_ADDR_LS);
 	advk_writel(pcie, 0, PIO_ADDR_MS);
 
 	/* Calculate the write strobe */
 	offset      = where & 0x3;
-	reg         = val << (8 * offset);
+	data        = val << (8 * offset);
 	data_strobe = GENMASK(size - 1, 0) << offset;
 
 	/* Program the data register */
-	advk_writel(pcie, reg, PIO_WR_DATA);
+	advk_writel(pcie, data, PIO_WR_DATA);
 
 	/* Program the data strobe */
 	advk_writel(pcie, data_strobe, PIO_WR_DATA_STRB);
