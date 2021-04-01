@@ -1608,14 +1608,7 @@ static int advk_pcie_init_irq_domain(struct advk_pcie *pcie)
 	}
 
 	irq_chip = &pcie->irq_chip;
-
-	irq_chip->name = devm_kasprintf(dev, GFP_KERNEL, "%s-irq",
-					dev_name(dev));
-	if (!irq_chip->name) {
-		ret = -ENOMEM;
-		goto out_put_node;
-	}
-
+	irq_chip->name = "advk-INT";
 	irq_chip->irq_mask = advk_pcie_irq_mask;
 	irq_chip->irq_unmask = advk_pcie_irq_unmask;
 
