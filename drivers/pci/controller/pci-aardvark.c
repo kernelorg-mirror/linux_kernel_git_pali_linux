@@ -1597,7 +1597,6 @@ static int advk_pcie_init_irq_domain(struct advk_pcie *pcie)
 	struct device_node *node = dev->of_node;
 	struct device_node *pcie_intc_node;
 	struct irq_chip *irq_chip;
-	int ret = 0;
 
 	raw_spin_lock_init(&pcie->irq_lock);
 
@@ -1615,15 +1614,15 @@ static int advk_pcie_init_irq_domain(struct advk_pcie *pcie)
 	pcie->irq_domain =
 		irq_domain_add_linear(pcie_intc_node, PCI_NUM_INTX,
 				      &advk_pcie_irq_domain_ops, pcie);
+
+	of_node_put(pcie_intc_node);
+
 	if (!pcie->irq_domain) {
 		dev_err(dev, "Failed to get a INTx IRQ domain\n");
-		ret = -ENOMEM;
-		goto out_put_node;
+		return -ENOMEM;
 	}
 
-out_put_node:
-	of_node_put(pcie_intc_node);
-	return ret;
+	return 0;
 }
 
 static void advk_pcie_remove_irq_domain(struct advk_pcie *pcie)
