@@ -222,6 +222,10 @@
 #define     CTRL_MODE_MASK			0x1
 #define     PCIE_CORE_MODE_DIRECT		0x0
 #define     PCIE_CORE_MODE_COMMAND		0x1
+#define CTRL_WARM_RESET_REG			(CTRL_CORE_BASE_ADDR + 0x4)
+#define     CTRL_PCIE_CORE_WARM_RESET		BIT(0)
+#define     CTRL_PHY_CORE_WARM_RESET		BIT(1)
+#define     CTRL_PERSTN_GPIO_EN			BIT(3)
 
 /* PCIe Central Interrupts Registers */
 #define CENTRAL_INT_BASE_ADDR			0x1b000
@@ -550,6 +554,20 @@ static void advk_pcie_setup_hw(struct advk_pcie *pcie)
 	phys_addr_t msi_addr;
 	u32 val;
 	int i;
+
+	/*
+	 * Trigger PCIe Core Warm Reset. It resets all aardvark registers to
+	 * their default values and also flush some internal buffers which
+	 * cancel all stucked PIO transfers and therefore allows to access
+	 * PCIe config space via PIO transfers again.
+	 */
+	val = advk_readl(pcie, CTRL_WARM_RESET_REG);
+	val |= CTRL_PCIE_CORE_WARM_RESET;
+	advk_writel(pcie, val, CTRL_WARM_RESET_REG);
+	mdelay(1);
+	val &= ~CTRL_PCIE_CORE_WARM_RESET;
+	advk_writel(pcie, val, CTRL_WARM_RESET_REG);
+	mdelay(1);
 
 	/*
 	 * Configure PCIe Reference clock. Direction is from the PCIe
