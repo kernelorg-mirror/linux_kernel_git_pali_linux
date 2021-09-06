@@ -627,3 +627,57 @@ int of_pci_get_max_link_speed(struct device_node *node)
 	return max_link_speed;
 }
 EXPORT_SYMBOL_GPL(of_pci_get_max_link_speed);
+
+/**
+ * This function will try to find the slot power limit by finding
+ * a property called "slot-power-limit" of the given device node.
+ *
+ * @node: device tree node with the max link speed information
+ *
+ * Returns the slot power limit in mW and sets @slot_power_limit_value
+ * and @slot_power_limit_scale parameters to the slot power limit encoded
+ * in format used by PCIe Slot Capabilities Register.
+ *
+ * If the property is not found or is invalid then zero is returned.
+ */
+u32 of_pci_get_slot_power_limit(struct device_node *node,
+				u8 *slot_power_limit_value,
+				u8 *slot_power_limit_scale)
+{
+	u32 slot_power_limit;
+
+	if (of_property_read_u32(node, "slot-power-limit", &slot_power_limit))
+		slot_power_limit = 0;
+
+	/* Calculate Slot Power Limit Value and Slot Power Limit Scale */
+	if (slot_power_limit_scale && slot_power_limit_value) {
+		if (slot_power_limit == 0) {
+			*slot_power_limit_value = 0x00;
+			*slot_power_limit_scale = 0;
+		} else if (slot_power_limit <= 255) {
+			*slot_power_limit_value = slot_power_limit;
+			*slot_power_limit_scale = 3;
+		} else if (slot_power_limit <= 255*10) {
+			*slot_power_limit_value = slot_power_limit / 10;
+			*slot_power_limit_scale = 2;
+		} else if (slot_power_limit <= 255*100) {
+			*slot_power_limit_value = slot_power_limit / 100;
+			*slot_power_limit_scale = 1;
+		} else if (slot_power_limit <= 239*1000) {
+			*slot_power_limit_value = slot_power_limit / 1000;
+			*slot_power_limit_scale = 0;
+		} else if (slot_power_limit <= 250*1000) {
+			*slot_power_limit_value = 0xF0;
+			*slot_power_limit_scale = 0;
+		} else if (slot_power_limit <= 275*1000) {
+			*slot_power_limit_value = 0xF1;
+			*slot_power_limit_scale = 0;
+		} else {
+			*slot_power_limit_value = 0xF2;
+			*slot_power_limit_scale = 0;
+		}
+	}
+
+	return slot_power_limit;
+}
+EXPORT_SYMBOL_GPL(of_pci_get_slot_power_limit);
