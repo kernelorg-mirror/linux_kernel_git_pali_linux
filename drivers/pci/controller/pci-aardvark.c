@@ -1662,24 +1662,19 @@ static void advk_pcie_link_irq_handler(struct timer_list *timer)
 {
 	struct advk_pcie *pcie = from_timer(pcie, timer, link_irq_timer);
 	u16 slotctl;
-	int virq;
 
 	slotctl = le16_to_cpu(pcie->bridge.pcie_conf.slotctl);
 	if (!(slotctl & PCI_EXP_SLTCTL_DLLSCE) || !(slotctl & PCI_EXP_SLTCTL_HPIE))
 		return;
 
 	/* Aardvark HW returns zero for PCI_EXP_FLAGS_IRQ, so use PCIe interrupt 0 */
-	virq = irq_find_mapping(pcie->emul_irq_domain, 0);
-	if (virq)
-		generic_handle_irq(virq);
-	else
+	if (generic_handle_domain_irq(pcie->emul_irq_domain, 0) == -EINVAL)
 		dev_err_ratelimited(&pcie->pdev->dev, "unhandled HP IRQ\n");
 }
 
 static void advk_pcie_handle_msi(struct advk_pcie *pcie)
 {
 	u32 msi_val, msi_mask, msi_status, msi_idx;
-	int virq;
 
 	msi_mask = advk_readl(pcie, PCIE_MSI_MASK_REG);
 	msi_val = advk_readl(pcie, PCIE_MSI_STATUS_REG);
@@ -1691,10 +1686,7 @@ static void advk_pcie_handle_msi(struct advk_pcie *pcie)
 
 		advk_writel(pcie, BIT(msi_idx), PCIE_MSI_STATUS_REG);
 
-		virq = irq_find_mapping(pcie->msi_inner_domain, msi_idx);
-		if (virq)
-			generic_handle_irq(virq);
-		else
+		if (generic_handle_domain_irq(pcie->msi_inner_domain, msi_idx) == -EINVAL)
 			dev_err_ratelimited(&pcie->pdev->dev, "unexpected MSI 0x%02x\n", msi_idx);
 	}
 
@@ -1707,7 +1699,7 @@ static void advk_pcie_handle_int(struct advk_pcie *pcie)
 	u32 isr0_val, isr0_mask, isr0_status;
 	u32 isr1_val, isr1_mask, isr1_status;
 	u16 slotsta;
-	int i, virq;
+	int i;
 
 	isr0_val = advk_readl(pcie, PCIE_ISR0_REG);
 	isr0_mask = advk_readl(pcie, PCIE_ISR0_MASK_REG);
@@ -1736,10 +1728,7 @@ static void advk_pcie_handle_int(struct advk_pcie *pcie)
 			 * Aardvark HW returns zero for PCI_EXP_FLAGS_IRQ, so use PCIe interrupt 0.
 			 */
 			if (le16_to_cpu(pcie->bridge.pcie_conf.rootctl) & PCI_EXP_RTCTL_PMEIE) {
-				virq = irq_find_mapping(pcie->emul_irq_domain, 0);
-				if (virq)
-					generic_handle_irq(virq);
-				else
+				if (generic_handle_domain_irq(pcie->emul_irq_domain, 0) == -EINVAL)
 					dev_err_ratelimited(&pcie->pdev->dev,
 							    "unhandled PME IRQ\n");
 			}
@@ -1750,10 +1739,7 @@ static void advk_pcie_handle_int(struct advk_pcie *pcie)
 	if (isr0_status & PCIE_ISR0_ERR_MASK) {
 		advk_writel(pcie, PCIE_ISR0_ERR_MASK, PCIE_ISR0_REG);
 		/* Aardvark HW returns zero for PCI_ERR_ROOT_AER_IRQ, so use PCIe interrupt 0 */
-		virq = irq_find_mapping(pcie->emul_irq_domain, 0);
-		if (virq)
-			generic_handle_irq(virq);
-		else
+		if (generic_handle_domain_irq(pcie->emul_irq_domain, 0) == -EINVAL)
 			dev_err_ratelimited(&pcie->pdev->dev, "unhandled ERR IRQ\n");
 	}
 
@@ -2079,7 +2065,7 @@ static int advk_pcie_probe(struct platform_device *pdev)
 		return ret;
 
 	/*
-	 * generic_handle_irq() expects local IRQs to be disabled as
+	 * generic_handle_domain_irq() expects local IRQs to be disabled as
 	 * normally it is called from interrupt context, so use TIMER_IRQSAFE
 	 * flag for this link_irq_timer.
 	 */
