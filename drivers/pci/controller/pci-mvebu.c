@@ -44,7 +44,7 @@
 #define PCIE_WIN5_BASE_OFF	0x1884
 #define PCIE_WIN5_REMAP_OFF	0x188c
 #define PCIE_CONF_ADDR_OFF	0x18f8
-#define  PCIE_CONF_ADDR_EN		0x80000000
+#define  PCIE_CONF_ADDR_EN		BIT(31)
 #define  PCIE_CONF_REG(r)		((((r) & 0xf00) << 16) | ((r) & 0xfc))
 #define  PCIE_CONF_BUS(b)		(((b) & 0xff) << 16)
 #define  PCIE_CONF_DEV(d)		(((d) & 0x1f) << 11)
@@ -70,13 +70,13 @@
 #define  PCIE_INT_ERR_MASK		(PCIE_INT_ERR_FATAL | PCIE_INT_ERR_NONFATAL | PCIE_INT_ERR_COR)
 #define  PCIE_INT_ALL_MASK		GENMASK(31, 0)
 #define PCIE_CTRL_OFF		0x1a00
-#define  PCIE_CTRL_X1_MODE		0x0001
+#define  PCIE_CTRL_X1_MODE		BIT(0)
 #define  PCIE_CTRL_RC_MODE		BIT(1)
 #define  PCIE_CTRL_MASTER_HOT_RESET	BIT(24)
 #define PCIE_STAT_OFF		0x1a04
-#define  PCIE_STAT_BUS                  0xff00
-#define  PCIE_STAT_DEV                  0x1f0000
 #define  PCIE_STAT_LINK_DOWN		BIT(0)
+#define  PCIE_STAT_BUS			GENMASK(15, 8)
+#define  PCIE_STAT_DEV			GENMASK(20, 16)
 #define PCIE_SSPL_OFF		0x1a0c
 #define  PCIE_SSPL_VALUE_SHIFT		0
 #define  PCIE_SSPL_VALUE_MASK		GENMASK(7, 0)
