@@ -56,12 +56,14 @@
 #define PCIE_CONF_DATA_OFF	0x18fc
 #define PCIE_INT_CAUSE_OFF	0x1900
 #define PCIE_INT_UNMASK_OFF	0x1910
+#define  PCIE_INT_TXREQ_NOLINK		BIT(0)
 #define  PCIE_INT_DET_COR		BIT(8)
 #define  PCIE_INT_DET_NONFATAL		BIT(9)
 #define  PCIE_INT_DET_FATAL		BIT(10)
 #define  PCIE_INT_ERR_FATAL		BIT(16)
 #define  PCIE_INT_ERR_NONFATAL		BIT(17)
 #define  PCIE_INT_ERR_COR		BIT(18)
+#define  PCIE_INT_LINK_FAIL		BIT(23)
 #define  PCIE_INT_INTX(i)		BIT(24+i)
 #define  PCIE_INT_PM_PME		BIT(28)
 #define  PCIE_INT_DET_MASK		(PCIE_INT_DET_COR | PCIE_INT_DET_NONFATAL | PCIE_INT_DET_FATAL)
@@ -134,6 +136,8 @@ struct mvebu_pcie_port {
 	int error_irq;
 	int intx_irq;
 	bool pme_pending;
+	struct timer_list link_irq_timer;
+	bool link_was_up;
 };
 
 static inline void mvebu_writel(struct mvebu_pcie_port *port, u32 val, u32 reg)
@@ -153,7 +157,26 @@ static inline bool mvebu_has_ioport(struct mvebu_pcie_port *port)
 
 static bool mvebu_pcie_link_up(struct mvebu_pcie_port *port)
 {
-	return !(mvebu_readl(port, PCIE_STAT_OFF) & PCIE_STAT_LINK_DOWN);
+	bool link_is_up;
+	u16 slotsta;
+
+	link_is_up = !(mvebu_readl(port, PCIE_STAT_OFF) & PCIE_STAT_LINK_DOWN);
+
+	if (link_is_up != port->link_was_up) {
+		port->link_was_up = link_is_up;
+		/*
+		 * Link IRQ timer/handler is available only when "error"
+		 * interrupt was specified in DT.
+		 */
+		if (port->error_irq > 0) {
+			slotsta = le16_to_cpu(port->bridge.pcie_conf.slotsta);
+			port->bridge.pcie_conf.slotsta =
+				cpu_to_le16(slotsta | PCI_EXP_SLTSTA_DLLSC);
+			mod_timer(&port->link_irq_timer, jiffies + 1);
+		}
+	}
+
+	return link_is_up;
 }
 
 static u8 mvebu_pcie_get_local_bus_nr(struct mvebu_pcie_port *port)
@@ -343,6 +366,19 @@ static void mvebu_pcie_setup_hw(struct mvebu_pcie_port *port)
 	if (port->error_irq > 0) {
 		unmask = mvebu_readl(port, PCIE_INT_UNMASK_OFF);
 		unmask |= PCIE_INT_DET_MASK;
+		mvebu_writel(port, unmask, PCIE_INT_UNMASK_OFF);
+	}
+
+	/*
+	 * Unmask No Link and Link Failure interrupts to process Link Down
+	 * events. These events are reported as Data Link Layer State Changed
+	 * notification via Hot Plug Interrupt. Other parts of Link change
+	 * events are available only when "error" interrupt was specified in DT.
+	 * So enable these interrupts under same conditions.
+	 */
+	if (port->error_irq > 0) {
+		unmask = mvebu_readl(port, PCIE_INT_UNMASK_OFF);
+		unmask |= PCIE_INT_TXREQ_NOLINK | PCIE_INT_LINK_FAIL;
 		mvebu_writel(port, unmask, PCIE_INT_UNMASK_OFF);
 	}
 
@@ -697,6 +733,14 @@ mvebu_pci_bridge_emul_pcie_conf_read(struct pci_bridge_emul *bridge,
 			val |= slotctl & PCI_EXP_SLTCTL_ASPL_DISABLE;
 		else if (!(mvebu_readl(port, PCIE_SSPL_OFF) & PCIE_SSPL_ENABLE))
 			val |= PCI_EXP_SLTCTL_ASPL_DISABLE;
+		/*
+		 * HPIE and DLLSCE bits are stored only in emulated config
+		 * space buffer and are supported only when "error" interrupt
+		 * was specified in DT.
+		 */
+		if (port->error_irq > 0)
+			val |= slotctl & (PCI_EXP_SLTCTL_HPIE |
+					  PCI_EXP_SLTCTL_DLLSCE);
 		/* This callback is 32-bit and in high bits is slot status. */
 		val |= slotsta << 16;
 		*value = val;
@@ -828,6 +872,25 @@ mvebu_pci_bridge_emul_base_conf_write(struct pci_bridge_emul *bridge,
 			else
 				ctrl &= ~PCIE_CTRL_MASTER_HOT_RESET;
 			mvebu_writel(port, ctrl, PCIE_CTRL_OFF);
+			/*
+			 * When dropping to Detect via Hot Reset, Disable Link
+			 * or Loopback states, the Link Failure interrupt is not
+			 * asserted. So when setting Secondary Bus Reset / Hot
+			 * Reset bit, call link IRQ timer/handler manually.
+			 */
+			if ((ctrl & PCIE_CTRL_MASTER_HOT_RESET) && port->link_was_up) {
+				port->link_was_up = false;
+				/*
+				 * Link IRQ timer/handler is available only when
+				 * "error" interrupt was specified in DT.
+				 */
+				if (port->error_irq > 0) {
+					u16 slotsta = le16_to_cpu(port->bridge.pcie_conf.slotsta);
+					port->bridge.pcie_conf.slotsta =
+						cpu_to_le16(slotsta | PCI_EXP_SLTSTA_DLLSC);
+					mod_timer(&port->link_irq_timer, jiffies + 1);
+				}
+			}
 		}
 		break;
 
@@ -856,6 +919,25 @@ mvebu_pci_bridge_emul_pcie_conf_write(struct pci_bridge_emul *bridge,
 		new &= ~PCI_EXP_LNKCTL_CLKREQ_EN;
 
 		mvebu_writel(port, new, PCIE_CAP_PCIEXP + PCI_EXP_LNKCTL);
+		/*
+		 * When dropping to Detect via Hot Reset, Disable Link
+		 * or Loopback states, the Link Failure interrupt is not
+		 * asserted. So when setting Link Disable bit, call link
+		 * IRQ timer/handler manually.
+		 */
+		if ((new & PCI_EXP_LNKCTL_LD) && port->link_was_up) {
+			port->link_was_up = false;
+			/*
+			 * Link IRQ timer/handler is available only when
+			 * "error" interrupt was specified in DT.
+			 */
+			if (port->error_irq > 0) {
+				u16 slotsta = le16_to_cpu(port->bridge.pcie_conf.slotsta);
+				port->bridge.pcie_conf.slotsta =
+					cpu_to_le16(slotsta | PCI_EXP_SLTSTA_DLLSC);
+				mod_timer(&port->link_irq_timer, jiffies + 1);
+			}
+		}
 		break;
 
 	case PCI_EXP_SLTCTL:
@@ -996,6 +1078,15 @@ static int mvebu_pci_bridge_emul_init(struct mvebu_pcie_port *port)
 	bridge->pcie_conf.cap = cpu_to_le16(pcie_cap_ver | PCI_EXP_FLAGS_SLOT);
 
 	/*
+	 * When "error" interrupt was specified in DT then driver is able to
+	 * deliver Data Link Layer State Change interrupt. So in this case mark
+	 * bridge as Hot Plug Capable as this is the way how to enable
+	 * delivering of Data Link Layer State Change interrupts.
+	 *
+	 * No Command Completed Support is set because bridge does not support
+	 * Command Completed Interrupt. Every command is executed immediately
+	 * without any delay.
+	 *
 	 * Set Presence Detect State bit permanently as there is no support for
 	 * unplugging PCIe card from the slot. Assume that PCIe card is always
 	 * connected in slot.
@@ -1007,6 +1098,8 @@ static int mvebu_pci_bridge_emul_init(struct mvebu_pcie_port *port)
 	 * Also set correct slot power limit.
 	 */
 	bridge->pcie_conf.slotcap = cpu_to_le32(
+		PCI_EXP_SLTCAP_NCCS |
+		(port->error_irq > 0 ? PCI_EXP_SLTCAP_HPC : 0) |
 		FIELD_PREP(PCI_EXP_SLTCAP_SPLV, port->slot_power_limit_value) |
 		FIELD_PREP(PCI_EXP_SLTCAP_SPLS, port->slot_power_limit_scale) |
 		FIELD_PREP(PCI_EXP_SLTCAP_PSN, port->port+1));
@@ -1198,11 +1291,29 @@ static int mvebu_pcie_init_irq_domain(struct mvebu_pcie_port *port)
 	return 0;
 }
 
+static void mvebu_pcie_link_irq_handler(struct timer_list *timer)
+{
+	struct mvebu_pcie_port *port = from_timer(port, timer, link_irq_timer);
+	struct device *dev = &port->pcie->pdev->dev;
+	u16 slotctl;
+
+	dev_info(dev, "%s: link %s\n", port->name, port->link_was_up ? "up" : "down");
+
+	slotctl = le16_to_cpu(port->bridge.pcie_conf.slotctl);
+	if (!(slotctl & PCI_EXP_SLTCTL_DLLSCE) ||
+	    !(slotctl & PCI_EXP_SLTCTL_HPIE))
+		return;
+
+	if (generic_handle_domain_irq(port->rp_irq_domain, 0) == -EINVAL)
+		dev_err_ratelimited(dev, "unhandled HP IRQ\n");
+}
+
 static irqreturn_t mvebu_pcie_error_irq_handler(int irq, void *arg)
 {
 	struct mvebu_pcie_port *port = arg;
 	struct device *dev = &port->pcie->pdev->dev;
 	u32 cause, unmask, status;
+	u16 slotsta;
 
 	cause = mvebu_readl(port, PCIE_INT_CAUSE_OFF);
 	unmask = mvebu_readl(port, PCIE_INT_UNMASK_OFF);
@@ -1238,6 +1349,25 @@ static irqreturn_t mvebu_pcie_error_irq_handler(int irq, void *arg)
 		mvebu_writel(port, ~PCIE_INT_DET_MASK, PCIE_INT_CAUSE_OFF);
 		if (generic_handle_domain_irq(port->rp_irq_domain, 0) == -EINVAL)
 			dev_err_ratelimited(dev, "unhandled ERR IRQ\n");
+	}
+
+	/* Process No Link and Link Failure interrupts as HP IRQ */
+	if (status & (PCIE_INT_TXREQ_NOLINK | PCIE_INT_LINK_FAIL)) {
+		mvebu_writel(port,
+			     ~(PCIE_INT_TXREQ_NOLINK | PCIE_INT_LINK_FAIL),
+			     PCIE_INT_CAUSE_OFF);
+		if (port->link_was_up) {
+			port->link_was_up = false;
+			slotsta = le16_to_cpu(port->bridge.pcie_conf.slotsta);
+			port->bridge.pcie_conf.slotsta =
+				cpu_to_le16(slotsta | PCI_EXP_SLTSTA_DLLSC);
+			/*
+			 * Deactivate timer and call mvebu_pcie_link_irq_handler()
+			 * function directly as we are in the interrupt context.
+			 */
+			del_timer_sync(&port->link_irq_timer);
+			mvebu_pcie_link_irq_handler(&port->link_irq_timer);
+		}
 	}
 
 	return status ? IRQ_HANDLED : IRQ_NONE;
@@ -1806,6 +1936,18 @@ static int mvebu_pcie_probe(struct platform_device *pdev)
 		}
 
 		/*
+		 * Function mvebu_pcie_link_irq_handler() calls function
+		 * generic_handle_irq() and it expects local IRQs to be disabled
+		 * as normally generic_handle_irq() is called from the interrupt
+		 * context. So use TIMER_IRQSAFE flag for this link_irq_timer.
+		 * Available only if "error" interrupt was specified in DT.
+		 */
+		if (port->error_irq > 0)
+			timer_setup(&port->link_irq_timer,
+				    mvebu_pcie_link_irq_handler,
+				    TIMER_IRQSAFE);
+
+		/*
 		 * PCIe topology exported by mvebu hw is quite complicated. In
 		 * reality has something like N fully independent host bridges
 		 * where each host bridge has one PCIe Root Port (which acts as
@@ -1940,6 +2082,9 @@ static int mvebu_pcie_remove(struct platform_device *pdev)
 				irq_dispose_mapping(virq);
 			irq_domain_remove(port->rp_irq_domain);
 		}
+
+		if (port->error_irq > 0)
+			del_timer_sync(&port->link_irq_timer);
 
 		/* Free config space for emulated root bridge. */
 		pci_bridge_emul_cleanup(&port->bridge);

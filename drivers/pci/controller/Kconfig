@@ -10,6 +10,9 @@ config PCI_MVEBU
 	depends on ARM
 	depends on OF
 	select PCI_BRIDGE_EMUL
+	select PCIEPORTBUS
+	select HOTPLUG_PCI
+	select HOTPLUG_PCI_PCIE
 	help
 	 Add support for Marvell EBU PCIe controller. This PCIe controller
 	 is used on 32-bit Marvell ARM SoCs: Dove, Kirkwood, Armada 370,
