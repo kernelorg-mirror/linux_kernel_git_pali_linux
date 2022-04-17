@@ -398,6 +398,11 @@
 				interrupt-controller;
 				msi-controller;
 				interrupts = <GIC_PPI 15 IRQ_TYPE_LEVEL_HIGH>;
+
+				soc_err: interrupt-controller@20 {
+					interrupt-controller;
+					#interrupt-cells = <1>;
+				};
 			};
 
 			timer: timer@20300 {
