@@ -24,6 +24,11 @@ Optional properties:
   connected as a slave to the Cortex-A9 GIC. The provided interrupt
   indicate to which GIC interrupt the MPIC output is connected.
 
+Optional subnodes:
+
+- interrupt-controller@20 with interrupt-controller property for
+  MPIC SoC Error IRQ controller
+
 Example:
 
         mpic: interrupt-controller@d0020000 {
@@ -35,4 +40,8 @@ Example:
               msi-controller;
               reg = <0xd0020a00 0x1d0>,
                     <0xd0021070 0x58>;
+              soc_err: interrupt-controller@20 {
+                    interrupt-controller;
+                    #interrupt-cells = <1>;
+              };
         };
