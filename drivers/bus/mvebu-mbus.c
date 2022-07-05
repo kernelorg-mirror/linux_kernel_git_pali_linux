@@ -142,6 +142,7 @@ struct mvebu_mbus_state {
 	struct dentry *debugfs_devs;
 	struct resource pcie_mem_aperture;
 	struct resource pcie_io_aperture;
+	struct resource pcie_cfg_aperture;
 	const struct mvebu_mbus_soc_data *soc;
 	int hw_io_coherency;
 
@@ -953,6 +954,14 @@ void mvebu_mbus_get_pcie_io_aperture(struct resource *res)
 }
 EXPORT_SYMBOL_GPL(mvebu_mbus_get_pcie_io_aperture);
 
+void mvebu_mbus_get_pcie_cfg_aperture(struct resource *res)
+{
+	if (!res)
+		return;
+	*res = mbus_state.pcie_cfg_aperture;
+}
+EXPORT_SYMBOL_GPL(mvebu_mbus_get_pcie_cfg_aperture);
+
 int mvebu_mbus_get_dram_win_info(phys_addr_t phyaddr, u8 *target, u8 *attr)
 {
 	const struct mbus_dram_target_info *dram;
@@ -1280,7 +1289,8 @@ static int __init mbus_dt_setup(struct mvebu_mbus_state *mbus,
 
 static void __init mvebu_mbus_get_pcie_resources(struct device_node *np,
 						 struct resource *mem,
-						 struct resource *io)
+						 struct resource *io,
+						 struct resource *cfg)
 {
 	u32 reg[2];
 	int ret;
@@ -1293,6 +1303,8 @@ static void __init mvebu_mbus_get_pcie_resources(struct device_node *np,
 	mem->end = -1;
 	memset(io, 0, sizeof(struct resource));
 	io->end = -1;
+	memset(cfg, 0, sizeof(struct resource));
+	cfg->end = -1;
 
 	ret = of_property_read_u32_array(np, "pcie-mem-aperture", reg, ARRAY_SIZE(reg));
 	if (!ret) {
@@ -1306,6 +1318,13 @@ static void __init mvebu_mbus_get_pcie_resources(struct device_node *np,
 		io->start = reg[0];
 		io->end = io->start + reg[1] - 1;
 		io->flags = IORESOURCE_IO;
+	}
+
+	ret = of_property_read_u32_array(np, "pcie-cfg-aperture", reg, ARRAY_SIZE(reg));
+	if (!ret) {
+		cfg->start = reg[0];
+		cfg->end = cfg->start + reg[1] - 1;
+		cfg->flags = IORESOURCE_MEM;
 	}
 }
 
@@ -1362,9 +1381,10 @@ int __init mvebu_mbus_dt_init(bool is_coherent)
 
 	mbus_state.hw_io_coherency = is_coherent;
 
-	/* Get optional pcie-{mem,io}-aperture properties */
+	/* Get optional pcie-{mem,io,cfg}-aperture properties */
 	mvebu_mbus_get_pcie_resources(np, &mbus_state.pcie_mem_aperture,
-					  &mbus_state.pcie_io_aperture);
+					  &mbus_state.pcie_io_aperture,
+					  &mbus_state.pcie_cfg_aperture);
 
 	ret = mvebu_mbus_common_init(&mbus_state,
 				     mbuswins_res.start,
