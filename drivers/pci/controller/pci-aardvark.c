@@ -1675,6 +1675,11 @@ static int advk_pcie_init_emul_irq_domain(struct advk_pcie *pcie)
 
 static void advk_pcie_remove_emul_irq_domain(struct advk_pcie *pcie)
 {
+	int virq;
+
+	virq = irq_find_mapping(pcie->emul_irq_domain, 0);
+	if (virq > 0)
+		irq_dispose_mapping(virq);
 	irq_domain_remove(pcie->emul_irq_domain);
 }
 
