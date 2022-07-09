@@ -1649,6 +1649,14 @@ static int advk_pcie_init_irq_domain(struct advk_pcie *pcie)
 
 static void advk_pcie_remove_irq_domain(struct advk_pcie *pcie)
 {
+	int virq, i;
+
+	for (i = 0; i < PCI_NUM_INTX; i++) {
+		virq = irq_find_mapping(pcie->irq_domain, i);
+		if (virq > 0)
+			irq_dispose_mapping(virq);
+	}
+
 	irq_domain_remove(pcie->irq_domain);
 }
 
