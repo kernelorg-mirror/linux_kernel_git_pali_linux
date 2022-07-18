@@ -7,6 +7,7 @@ Mandatory properties:
     marvell,armada-xp-pcie
     marvell,dove-pcie
     marvell,kirkwood-pcie
+    marvell,orion5x-pcie
 - #address-cells, set to <3>
 - #size-cells, set to <2>
 - #interrupt-cells, set to <1>
@@ -60,7 +61,8 @@ PCIe interface, having the following mandatory properties:
 - reg: used only for interrupt mapping, so only the first four bytes
   are used to refer to the correct bus number and device number.
 - assigned-addresses: reference to the MMIO registers used to control
-  this PCIe interface.
+  this PCIe interface. first value controls internal registers and
+  second value (Orion-specific) controls config space registers.
 - clocks: the clock associated to this PCIe interface
 - marvell,pcie-port: the physical PCIe port number
 - status: either "disabled" or "okay"
