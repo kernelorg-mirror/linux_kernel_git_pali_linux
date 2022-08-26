@@ -5,7 +5,7 @@ menu "PCI controller drivers"
 
 config PCI_MVEBU
 	tristate "Marvell EBU PCIe controller"
-	depends on ARCH_MVEBU || ARCH_DOVE || COMPILE_TEST
+	depends on ARCH_MVEBU || ARCH_DOVE || ARCH_ORION5X || COMPILE_TEST
 	depends on MVEBU_MBUS
 	depends on ARM
 	depends on OF
@@ -15,7 +15,7 @@ config PCI_MVEBU
 	select HOTPLUG_PCI_PCIE
 	help
 	 Add support for Marvell EBU PCIe controller. This PCIe controller
-	 is used on 32-bit Marvell ARM SoCs: Dove, Kirkwood, Armada 370,
+	 is used on 32-bit Marvell ARM SoCs: Orion, Kirkwood, Dove, Armada 370,
 	 Armada XP, Armada 375, Armada 38x and Armada 39x.
 
 config PCI_AARDVARK
