@@ -151,6 +151,20 @@ static int __init pcie_setup(struct pci_sys_data *sys)
 	orion_pcie_setup(PCIE_BASE);
 
 	/*
+	 * The PCIe windows will no longer be statically allocated
+	 * here once Orion5x is migrated to the pci-mvebu driver.
+	 */
+	mvebu_mbus_add_window_remap_by_id(ORION_MBUS_PCIE_IO_TARGET,
+					  ORION_MBUS_PCIE_IO_ATTR,
+					  ORION5X_PCIE_IO_PHYS_BASE,
+					  ORION5X_PCIE_IO_SIZE,
+					  ORION5X_PCIE_IO_BUS_BASE);
+	mvebu_mbus_add_window_by_id(ORION_MBUS_PCIE_MEM_TARGET,
+				    ORION_MBUS_PCIE_MEM_ATTR,
+				    ORION5X_PCIE_MEM_PHYS_BASE,
+				    ORION5X_PCIE_MEM_SIZE);
+
+	/*
 	 * Check whether to apply Orion-1/Orion-NAS PCIe config
 	 * read transaction workaround.
 	 */
