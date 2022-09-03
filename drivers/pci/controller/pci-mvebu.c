@@ -1865,18 +1865,14 @@ static int mvebu_pcie_probe(struct platform_device *pdev)
 		if (IS_ERR(port->base)) {
 			dev_err(dev, "%s: cannot map registers\n", port->name);
 			port->base = NULL;
-			mvebu_pcie_powerdown(port);
-			continue;
+			goto err_port_down;
 		}
 
 		ret = mvebu_pci_bridge_emul_init(port);
 		if (ret < 0) {
 			dev_err(dev, "%s: cannot init emulated bridge\n",
 				port->name);
-			devm_iounmap(dev, port->base);
-			port->base = NULL;
-			mvebu_pcie_powerdown(port);
-			continue;
+			goto err_base_unmap;
 		}
 
 		if (port->error_irq > 0 || port->intx_irq > 0) {
@@ -1884,11 +1880,7 @@ static int mvebu_pcie_probe(struct platform_device *pdev)
 			if (ret) {
 				dev_err(dev, "%s: cannot init irq domain\n",
 					port->name);
-				pci_bridge_emul_cleanup(&port->bridge);
-				devm_iounmap(dev, port->base);
-				port->base = NULL;
-				mvebu_pcie_powerdown(port);
-				continue;
+				goto err_bridge_cleanup;
 			}
 		}
 
@@ -1900,15 +1892,7 @@ static int mvebu_pcie_probe(struct platform_device *pdev)
 			if (ret) {
 				dev_err(dev, "%s: cannot register error interrupt handler: %d\n",
 					port->name, ret);
-				if (port->intx_irq_domain)
-					irq_domain_remove(port->intx_irq_domain);
-				if (port->rp_irq_domain)
-					irq_domain_remove(port->rp_irq_domain);
-				pci_bridge_emul_cleanup(&port->bridge);
-				devm_iounmap(dev, port->base);
-				port->base = NULL;
-				mvebu_pcie_powerdown(port);
-				continue;
+				goto err_domain_remove;
 			}
 		}
 
@@ -1920,17 +1904,7 @@ static int mvebu_pcie_probe(struct platform_device *pdev)
 			if (ret) {
 				dev_err(dev, "%s: cannot register intx interrupt handler: %d\n",
 					port->name, ret);
-				if (port->error_irq > 0)
-					devm_free_irq(dev, port->error_irq, port);
-				if (port->intx_irq_domain)
-					irq_domain_remove(port->intx_irq_domain);
-				if (port->rp_irq_domain)
-					irq_domain_remove(port->rp_irq_domain);
-				pci_bridge_emul_cleanup(&port->bridge);
-				devm_iounmap(dev, port->base);
-				port->base = NULL;
-				mvebu_pcie_powerdown(port);
-				continue;
+				goto err_free_error_irq;
 			}
 		}
 
@@ -2024,6 +1998,29 @@ static int mvebu_pcie_probe(struct platform_device *pdev)
 		mvebu_pcie_setup_hw(port);
 		mvebu_pcie_set_local_dev_nr(port, 1);
 		mvebu_pcie_set_local_bus_nr(port, 0);
+
+		continue;
+
+err_free_error_irq:
+		if (port->error_irq > 0)
+			devm_free_irq(dev, port->error_irq, port);
+
+err_domain_remove:
+		if (port->intx_irq_domain)
+			irq_domain_remove(port->intx_irq_domain);
+
+		if (port->rp_irq_domain)
+			irq_domain_remove(port->rp_irq_domain);
+
+err_bridge_cleanup:
+		pci_bridge_emul_cleanup(&port->bridge);
+
+err_base_unmap:
+		devm_iounmap(dev, port->base);
+		port->base = NULL;
+
+err_port_down:
+		mvebu_pcie_powerdown(port);
 	}
 
 	bridge->sysdata = pcie;
