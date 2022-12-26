@@ -241,7 +241,6 @@
 			#address-cells = <3>;
 			#size-cells = <2>;
 
-			msi-parent = <&intc>;
 			bus-range = <0x00 0xff>;
 
 			ranges = <0x82000000 0x0    0x40000  MBUS_ID(0xf0, 0x01) 0x40000  0x0     0x2000>, /* Port 0.0 Internal registers */
