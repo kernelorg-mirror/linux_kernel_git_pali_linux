@@ -1871,6 +1871,9 @@ static int mvebu_pcie_parse_request_resources(struct mvebu_pcie *pcie)
 			return ret;
 	}
 
+	memset(&pcie->cfg, 0, sizeof(pcie->cfg));
+	pcie->cfg.end = -1;
+
 	if (of_device_is_compatible(dev->of_node, "marvell,orion5x-pcie")) {
 		/* Get the PCIe configuration space aperture */
 		mvebu_mbus_get_pcie_cfg_aperture(&pcie->cfg);
