@@ -1834,6 +1834,8 @@ static int mvebu_pcie_parse_request_resources(struct mvebu_pcie *pcie)
 	int ret;
 
 	/* Get the PCIe memory aperture */
+	memset(&pcie->mem, 0, sizeof(pcie->mem));
+	pcie->mem.end = -1;
 	mvebu_mbus_get_pcie_mem_aperture(&pcie->mem);
 	if (resource_size(&pcie->mem) == 0) {
 		dev_err(dev, "invalid memory aperture size\n");
@@ -1847,6 +1849,8 @@ static int mvebu_pcie_parse_request_resources(struct mvebu_pcie *pcie)
 		return ret;
 
 	/* Get the PCIe IO aperture */
+	memset(&pcie->io, 0, sizeof(pcie->io));
+	pcie->io.end = -1;
 	mvebu_mbus_get_pcie_io_aperture(&pcie->io);
 
 	if (resource_size(&pcie->io) != 0) {
