@@ -250,18 +250,16 @@ static int detect_directory_symlink_target(struct cifs_sb_info *cifs_sb,
 					   bool *directory)
 {
 	char sep = CIFS_DIR_SEP(cifs_sb);
-	struct cifs_open_parms oparms;
+	struct cifs_open_info_data query_info;
 	struct tcon_link *tlink;
 	struct cifs_tcon *tcon;
 	const char *basename;
-	struct cifs_fid fid;
 	char *resolved_path;
 	int full_path_len;
 	int basename_len;
 	int symname_len;
 	char *path_sep;
-	__u32 oplock;
-	int open_rc;
+	int query_rc;
 
 	/*
 	 * First do some simple check. If the original Linux symlink target ends
@@ -284,7 +282,8 @@ static int detect_directory_symlink_target(struct cifs_sb_info *cifs_sb,
 	if (symname[0] == '/') {
 		cifs_dbg(FYI,
 			 "%s: cannot determinate if the symlink target path '%s' "
-			 "is directory or not, creating '%s' as file symlink\n",
+			 "is directory or not because path is absolute, "
+			 "creating '%s' as file symlink\n",
 			 __func__, symname, full_path);
 		return 0;
 	}
@@ -322,58 +321,34 @@ static int detect_directory_symlink_target(struct cifs_sb_info *cifs_sb,
 	if (sep == '\\')
 		convert_delimiter(path_sep, sep);
 
+	/*
+	 * Query resolved SMB symlink path and check if it is a directory or not.
+	 * Callback query_path_info() already handles cases when the server does
+	 * not grant FILE_READ_ATTRIBUTES permission for object, or when server
+	 * denies opening the object (e.g. because of DELETE_PENDING state).
+	 */
 	tcon = tlink_tcon(tlink);
-	oparms = CIFS_OPARMS(cifs_sb, tcon, resolved_path,
-			     FILE_READ_ATTRIBUTES, FILE_OPEN, 0, ACL_NO_MODE);
-	oparms.fid = &fid;
-
-	/* Try to open as a directory (NOT_FILE) */
-	oplock = 0;
-	oparms.create_options = cifs_create_options(cifs_sb,
-						    CREATE_NOT_FILE | OPEN_REPARSE_POINT);
-	open_rc = tcon->ses->server->ops->open(xid, &oparms, &oplock, NULL);
-	if (open_rc == 0) {
-		/* Successful open means that the target path is definitely a directory. */
-		*directory = true;
-		tcon->ses->server->ops->close(xid, tcon, &fid);
-	} else if (open_rc == -ENOTDIR) {
-		/* -ENOTDIR means that the target path is definitely a file. */
-		*directory = false;
-	} else if (open_rc == -ENOENT) {
+	query_rc = tcon->ses->server->ops->query_path_info(xid, tcon, cifs_sb,
+							   resolved_path, &query_info);
+	if (query_rc == 0) {
+		/* Query on path was successful, so just check for directory attr. */
+		*directory = le32_to_cpu(query_info.fi.Attributes) & ATTR_DIRECTORY;
+	} else if (query_rc == -ENOENT) {
 		/* -ENOENT means that the target path does not exist. */
 		cifs_dbg(FYI,
 			 "%s: symlink target path '%s' does not exist, "
 			 "creating '%s' as file symlink\n",
 			 __func__, symname, full_path);
 	} else {
-		/* Try to open as a file (NOT_DIR) */
-		oplock = 0;
-		oparms.create_options = cifs_create_options(cifs_sb,
-							    CREATE_NOT_DIR | OPEN_REPARSE_POINT);
-		open_rc = tcon->ses->server->ops->open(xid, &oparms, &oplock, NULL);
-		if (open_rc == 0) {
-			/* Successful open means that the target path is definitely a file. */
-			*directory = false;
-			tcon->ses->server->ops->close(xid, tcon, &fid);
-		} else if (open_rc == -EISDIR) {
-			/* -EISDIR means that the target path is definitely a directory. */
-			*directory = true;
-		} else {
-			/*
-			 * This code branch is called when we do not have a permission to
-			 * open the resolved_path or some other client/process denied
-			 * opening the resolved_path.
-			 *
-			 * TODO: Try to use ops->query_dir_first on the parent directory
-			 * of resolved_path, search for basename of resolved_path and
-			 * check if the ATTR_DIRECTORY is set in fi.Attributes. In some
-			 * case this could work also when opening of the path is denied.
-			 */
-			cifs_dbg(FYI,
-				 "%s: cannot determinate if the symlink target path '%s' "
-				 "is directory or not, creating '%s' as file symlink\n",
-				 __func__, symname, full_path);
-		}
+		/*
+		 * This code branch is called when we do not have a permission to
+		 * query the resolved_path or some other error occurred during query.
+		 */
+		cifs_dbg(FYI,
+			 "%s: cannot determinate if the symlink target path '%s' "
+			 "is directory or not because query path failed (%d), "
+			 "creating '%s' as file symlink\n",
+			 __func__, symname, query_rc, full_path);
 	}
 
 	kfree(resolved_path);
