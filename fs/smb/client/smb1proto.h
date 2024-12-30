@@ -141,7 +141,6 @@ int CIFSSMBQFileInfo(const unsigned int xid, struct cifs_tcon *tcon,
 		     u16 netfid, FILE_ALL_INFO *pFindData);
 int CIFSSMBQPathInfo(const unsigned int xid, struct cifs_tcon *tcon,
 		     const char *search_name, FILE_ALL_INFO *data,
-		     int legacy /* old style infolevel */,
 		     const struct nls_table *nls_codepage, int remap);
 int CIFSSMBUnixQFileInfo(const unsigned int xid, struct cifs_tcon *tcon,
 			 u16 netfid, FILE_UNIX_BASIC_INFO *pFindData);
