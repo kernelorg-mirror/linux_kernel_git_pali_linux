@@ -583,10 +583,11 @@ static int cifs_query_path_info(const unsigned int xid,
 
 	/*
 	 * Then fallback to CIFSFindFirst() which works also with non-NT servers
-	 * but does not does not provide NumberOfLinks.
+	 * but does not does not provide NumberOfLinks. Also it works for files
+	 * in DELETE_PENDING state (CIFSSMBQPathInfo() returns -EBUSY for them).
 	 * Can be used with backup intent flag to overcome -EACCES error.
 	 */
-	if ((rc == -EOPNOTSUPP || rc == -EINVAL ||
+	if ((rc == -EOPNOTSUPP || rc == -EINVAL || rc == -EBUSY ||
 	     (backup_cred(cifs_sb) && rc == -EACCES)) &&
 	    !non_unicode_wildcard) {
 		if (!(tcon->ses->capabilities & tcon->ses->server->vals->cap_nt_find))
