@@ -853,7 +853,9 @@ static int cifs_open_file(const unsigned int xid, struct cifs_open_parms *oparms
 				   oparms->disposition,
 				   oparms->desired_access,
 				   oparms->create_options,
-				   &oparms->fid->netfid, oplock, &fi,
+				   &oparms->fid->netfid,
+				   oplock,
+				   data ? &fi : NULL,
 				   oparms->cifs_sb->local_nls,
 				   cifs_remap(oparms->cifs_sb));
 	else

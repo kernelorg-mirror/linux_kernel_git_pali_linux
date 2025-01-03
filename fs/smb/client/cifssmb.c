@@ -1103,32 +1103,41 @@ OldOpenRetry:
 		count = 0;      /* no pad */
 		name_len = copy_path_name(pSMB->fileName, fileName);
 	}
-	if (*pOplock & REQ_OPLOCK)
-		pSMB->OpenFlags = cpu_to_le16(REQ_OPLOCK);
-	else if (*pOplock & REQ_BATCHOPLOCK)
-		pSMB->OpenFlags = cpu_to_le16(REQ_BATCHOPLOCK);
 
-	pSMB->OpenFlags |= cpu_to_le16(REQ_MORE_INFO);
+	if (*pOplock & REQ_BATCHOPLOCK)
+		pSMB->OpenFlags = cpu_to_le16(REQ_BATCHOPLOCK);
+	else if (*pOplock & REQ_OPLOCK)
+		pSMB->OpenFlags = cpu_to_le16(REQ_OPLOCK);
+
+	if (pfile_info)
+		pSMB->OpenFlags |= cpu_to_le16(REQ_MORE_INFO);
+
 	pSMB->Mode = cpu_to_le16(access_flags_to_smbopen_mode(access_flags));
-	pSMB->Mode |= cpu_to_le16(0x40); /* deny none */
+	pSMB->Mode |= cpu_to_le16(SMBOPEN_DENY_NONE);
+
+	if (create_options & CREATE_WRITE_THROUGH)
+		pSMB->Mode |= cpu_to_le16(SMBOPEN_WRITE_THROUGH);
+
+	if (create_options & CREATE_NO_BUFFER)
+		pSMB->Mode |= cpu_to_le16(SMBOPEN_DO_NOT_CACHE);
+
+	if (create_options & CREATE_RANDOM_ACCESS)
+		pSMB->Mode |= cpu_to_le16(SMBOPEN_RANDOM_ACCESS);
+	else if (create_options & CREATE_SEQUENTIAL)
+		pSMB->Mode |= cpu_to_le16(SMBOPEN_SEQUENTIAL);
+
 	/* set file as system file if special file such as fifo,
 	 * socket, char or block and server expecting SFU style and
 	   no Unix extensions */
-
 	if (create_options & CREATE_OPTION_SPECIAL)
 		pSMB->FileAttributes = cpu_to_le16(ATTR_SYSTEM);
-	else /* BB FIXME BB */
-		pSMB->FileAttributes = cpu_to_le16(0/*ATTR_NORMAL*/);
+	else
+		pSMB->FileAttributes = cpu_to_le16(0);
 
 	if (create_options & CREATE_OPTION_READONLY)
 		pSMB->FileAttributes |= cpu_to_le16(ATTR_READONLY);
 
-	/* BB FIXME BB */
-/*	pSMB->CreateOptions = cpu_to_le32(create_options &
-						 CREATE_OPTIONS_MASK); */
-	/* BB FIXME END BB */
-
-	pSMB->Sattr = cpu_to_le16(ATTR_HIDDEN | ATTR_SYSTEM | ATTR_DIRECTORY);
+	pSMB->Sattr = cpu_to_le16(ATTR_READONLY | ATTR_HIDDEN | ATTR_SYSTEM | ATTR_ARCHIVE);
 	pSMB->OpenFunction = cpu_to_le16(convert_disposition(openDisposition));
 	count += name_len;
 	inc_rfc1001_len(pSMB, count);
@@ -1139,24 +1148,38 @@ OldOpenRetry:
 	cifs_stats_inc(&tcon->stats.cifs_stats.num_opens);
 	if (rc) {
 		cifs_dbg(FYI, "Error in Open = %d\n", rc);
+	} else if (pSMBr->hdr.WordCount != 15) {
+		rc = -EIO;
 	} else {
-	/* BB verify if wct == 15 */
-
-/*		*pOplock = pSMBr->OplockLevel; */ /* BB take from action field*/
+		if (!(pSMBr->Action & 0x8000))
+			*pOplock = OPLOCK_NONE;
+		else if (*pOplock & REQ_BATCHOPLOCK)
+			*pOplock = OPLOCK_BATCH;
+		else if (*pOplock & REQ_OPLOCK)
+			*pOplock = OPLOCK_EXCLUSIVE;
+		else
+			*pOplock = OPLOCK_NONE;
 
 		*netfid = pSMBr->Fid;   /* cifs fid stays in le */
+
 		/* Let caller know file was created so we can set the mode. */
 		/* Do we care about the CreateAction in any other cases? */
-	/* BB FIXME BB */
-/*		if (cpu_to_le32(FILE_CREATE) == pSMBr->CreateAction)
-			*pOplock |= CIFS_CREATE_ACTION; */
-	/* BB FIXME END */
+		if ((pSMBr->Action & 0x0003) == 2)
+			*pOplock |= CIFS_CREATE_ACTION;
 
 		if (pfile_info) {
-			pfile_info->CreationTime = 0; /* BB convert CreateTime*/
-			pfile_info->LastAccessTime = 0; /* BB fixme */
-			pfile_info->LastWriteTime = 0; /* BB fixme */
-			pfile_info->ChangeTime = 0;  /* BB fixme */
+			struct timespec64 ts;
+			__u32 time = le32_to_cpu(pSMBr->LastWriteTime);
+
+			ts.tv_nsec = 0;
+			ts.tv_sec = time;
+			pfile_info->LastWriteTime = cpu_to_le64(cifs_UnixTimeToNT(ts));
+			pfile_info->ChangeTime = pfile_info->LastWriteTime;
+			if (*pOplock & CIFS_CREATE_ACTION)
+				pfile_info->CreationTime = pfile_info->LastWriteTime;
+			else
+				pfile_info->CreationTime = 0;
+			pfile_info->LastAccessTime = 0;
 			pfile_info->Attributes =
 				cpu_to_le32(le16_to_cpu(pSMBr->FileAttributes));
 			/* the file_info buf is endian converted by caller */
