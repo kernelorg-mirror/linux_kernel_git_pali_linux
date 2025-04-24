@@ -1686,7 +1686,7 @@ cifs_set_file_info(struct inode *inode, struct iattr *attrs, unsigned int xid,
 
 #ifdef CONFIG_CIFS_ALLOW_INSECURE_LEGACY
 /*
- * Open the given file (if it isn't already), set the DELETE_ON_CLOSE bit
+ * Open the given file (if it isn't already), set the DELETE_PENDING bit
  * and rename it to a random name that hopefully won't conflict with
  * anything else.
  */
@@ -1805,7 +1805,7 @@ cifs_rename_pending_delete(const char *full_path, struct dentry *dentry,
 		goto undo_setattr;
 	}
 
-	/* try to set DELETE_ON_CLOSE */
+	/* try to set DELETE_PENDING */
 	if (!test_bit(CIFS_INO_DELETE_PENDING, &cifsInode->flags)) {
 		rc = CIFSSMBSetFileDisposition(xid, tcon, true, fid.netfid,
 					       current->tgid);
