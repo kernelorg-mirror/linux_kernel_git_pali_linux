@@ -1822,10 +1822,8 @@ cifs_rename_pending_delete(const char *full_path, struct dentry *dentry,
 		 */
 		if (rc == -ENOENT)
 			rc = 0;
-		else if (rc != 0) {
-			rc = -EBUSY;
+		else if (rc != 0)
 			goto undo_rename;
-		}
 		set_bit(CIFS_INO_DELETE_PENDING, &cifsInode->flags);
 	}
 
