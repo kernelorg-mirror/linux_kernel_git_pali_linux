@@ -628,7 +628,11 @@ static int cifs_query_path_info(const unsigned int xid,
 				fi.EASize = di->EaSize;
 			}
 			fi.NumberOfLinks = cpu_to_le32(1);
-			fi.DeletePending = 0;
+			/*
+			 * Do not change fi.DeletePending as it is set by the above
+			 * CIFSSMBQPathInfo() call even on error. By default it is
+			 * initialized to zero (false).
+			 */
 			fi.Directory = !!(le32_to_cpu(fi.Attributes) & ATTR_DIRECTORY);
 			cifs_buf_release(search_info.ntwrk_buf_start);
 		} else if (!full_path[0]) {

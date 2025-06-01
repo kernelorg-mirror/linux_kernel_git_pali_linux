@@ -35,6 +35,7 @@
 #include "cifs_debug.h"
 #include "fscache.h"
 #include "smbdirect.h"
+#include "nterr.h"
 #ifdef CONFIG_CIFS_DFS_UPCALL
 #include "dfs_cache.h"
 #endif
@@ -3902,6 +3903,11 @@ QPathInfoRetry:
 			 (struct smb_hdr *) pSMBr, &bytes_returned, 0);
 	if (rc) {
 		cifs_dbg(FYI, "Send error in QPathInfo = %d\n", rc);
+		/* Fill at least the DeletePending for -EBUSY error code */
+		if (rc == -EBUSY && data)
+			data->DeletePending =
+			  (pSMBr->hdr.Flags2 & SMBFLG2_ERR_STATUS) &&
+			  pSMBr->hdr.Status.CifsError == cpu_to_le32(NT_STATUS_DELETE_PENDING);
 	} else {		/* decode response */
 		rc = validate_t2((struct smb_t2_rsp *)pSMBr);
 
