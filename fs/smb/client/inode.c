@@ -1755,20 +1755,6 @@ cifs_rename_pending_delete(const char *full_path, struct dentry *dentry,
 		goto out;
 	}
 
-	oparms = (struct cifs_open_parms) {
-		.tcon = tcon,
-		.cifs_sb = cifs_sb,
-		.desired_access = DELETE | FILE_WRITE_ATTRIBUTES,
-		.create_options = cifs_create_options(cifs_sb, CREATE_NOT_DIR),
-		.disposition = FILE_OPEN,
-		.path = full_path,
-		.fid = &fid,
-	};
-
-	rc = CIFS_open(xid, &oparms, &oplock, NULL);
-	if (rc != 0)
-		goto out;
-
 	origattr = cifsInode->cifsAttrs & ~ATTR_NORMAL;
 
 	/* clear ATTR_READONLY, needed for opening file with DELETE access */
@@ -1791,15 +1777,26 @@ cifs_rename_pending_delete(const char *full_path, struct dentry *dentry,
 	/* change dosattr, but only if needed */
 	if (dosattr != origattr) {
 		info_buf.Attributes = cpu_to_le32(dosattr);
-		rc = CIFSSMBSetFileInfo(xid, tcon, &info_buf, fid.netfid,
-					current->tgid);
+		rc = tcon->ses->server->ops->set_file_info(inode, full_path, &info_buf, xid);
 		/* although we would like to mark the file hidden
  		   if that fails we will still try to rename it */
-		if (!rc)
-			cifsInode->cifsAttrs = dosattr;
-		else
+		if (rc)
 			dosattr = origattr; /* since not able to change them */
 	}
+
+	oparms = (struct cifs_open_parms) {
+		.tcon = tcon,
+		.cifs_sb = cifs_sb,
+		.desired_access = DELETE,
+		.create_options = cifs_create_options(cifs_sb, CREATE_NOT_DIR),
+		.disposition = FILE_OPEN,
+		.path = full_path,
+		.fid = &fid,
+	};
+
+	rc = CIFS_open(xid, &oparms, &oplock, NULL);
+	if (rc != 0)
+		goto undo_setattr;
 
 	/* rename the file */
 	rc = CIFSSMBRenameOpenFile(xid, tcon, fid.netfid, sillyname,
@@ -1808,7 +1805,7 @@ cifs_rename_pending_delete(const char *full_path, struct dentry *dentry,
 				   cifs_remap(cifs_sb));
 	if (rc != 0) {
 		rc = -EBUSY;
-		goto undo_setattr;
+		goto undo_close;
 	}
 
 	/* try to set DELETE_PENDING */
@@ -1832,8 +1829,8 @@ cifs_rename_pending_delete(const char *full_path, struct dentry *dentry,
 		set_bit(CIFS_INO_DELETE_PENDING, &cifsInode->flags);
 	}
 
-out_close:
 	CIFSSMBClose(xid, tcon, fid.netfid);
+
 out:
 	cifs_put_tlink(tlink);
 	return rc;
@@ -1847,15 +1844,14 @@ undo_rename:
 	CIFSSMBRenameOpenFile(xid, tcon, fid.netfid, dentry->d_name.name,
 				true /* overwrite */,
 				cifs_sb->local_nls, cifs_remap(cifs_sb));
+undo_close:
+	CIFSSMBClose(xid, tcon, fid.netfid);
 undo_setattr:
 	if (dosattr != origattr) {
 		info_buf.Attributes = cpu_to_le32(origattr);
-		if (!CIFSSMBSetFileInfo(xid, tcon, &info_buf, fid.netfid,
-					current->tgid))
-			cifsInode->cifsAttrs = origattr;
+		tcon->ses->server->ops->set_file_info(inode, full_path, &info_buf, xid);
 	}
-
-	goto out_close;
+	goto out;
 }
 #endif /* CONFIG_CIFS_ALLOW_INSECURE_LEGACY */
 
