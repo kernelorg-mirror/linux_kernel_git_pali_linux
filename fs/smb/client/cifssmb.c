@@ -1125,7 +1125,11 @@ OldOpenRetry:
 		pSMB->OpenFlags |= cpu_to_le16(REQ_MORE_INFO);
 
 	pSMB->Mode = cpu_to_le16(access_flags_to_smbopen_mode(access_flags));
-	pSMB->Mode |= cpu_to_le16(SMBOPEN_DENY_NONE);
+
+	if (create_options & CREATE_OPTION_EXCLUSIVE)
+		pSMB->Mode |= cpu_to_le16(SMBOPEN_DENY_ALL);
+	else
+		pSMB->Mode |= cpu_to_le16(SMBOPEN_DENY_NONE);
 
 	if (create_options & CREATE_WRITE_THROUGH)
 		pSMB->Mode |= cpu_to_le16(SMBOPEN_WRITE_THROUGH);
@@ -1281,7 +1285,11 @@ openRetry:
 	if (create_options & CREATE_OPTION_READONLY)
 		req->FileAttributes |= cpu_to_le32(ATTR_READONLY);
 
-	req->ShareAccess = cpu_to_le32(FILE_SHARE_ALL);
+	if (create_options & CREATE_OPTION_EXCLUSIVE)
+		req->ShareAccess = cpu_to_le32(FILE_NO_SHARE);
+	else
+		req->ShareAccess = cpu_to_le32(FILE_SHARE_ALL);
+
 	req->CreateDisposition = cpu_to_le32(disposition);
 	req->CreateOptions = cpu_to_le32(create_options & CREATE_OPTIONS_MASK);
 

@@ -3034,7 +3034,11 @@ SMB2_open_init(struct cifs_tcon *tcon, struct TCP_Server_Info *server,
 	req->DesiredAccess = cpu_to_le32(oparms->desired_access);
 	/* File attributes ignored on open (used in create though) */
 	req->FileAttributes = cpu_to_le32(file_attributes);
-	req->ShareAccess = FILE_SHARE_ALL_LE;
+
+	if (oparms->create_options & CREATE_OPTION_EXCLUSIVE)
+		req->ShareAccess = cpu_to_le32(FILE_NO_SHARE);
+	else
+		req->ShareAccess = cpu_to_le32(FILE_SHARE_ALL);
 
 	req->CreateDisposition = cpu_to_le32(oparms->disposition);
 	req->CreateOptions = cpu_to_le32(oparms->create_options & CREATE_OPTIONS_MASK);

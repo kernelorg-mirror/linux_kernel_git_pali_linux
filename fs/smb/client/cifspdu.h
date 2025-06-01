@@ -395,6 +395,7 @@
 #define CREATE_OPTIONS_MASK     0x007FFFFF
 #define CREATE_OPTION_READONLY	0x10000000
 #define CREATE_OPTION_SPECIAL   0x20000000   /* system. NB not sent over wire */
+#define CREATE_OPTION_EXCLUSIVE 0x40000000   /* exclusive open, NB not set over wire */
 
 /* ImpersonationLevel flags */
 #define SECURITY_ANONYMOUS      0
