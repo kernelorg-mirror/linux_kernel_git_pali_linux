@@ -470,7 +470,7 @@ int CIFSSMBRename(const unsigned int xid, struct cifs_tcon *tcon,
 		  const char *from_name, const char *to_name,
 		  struct cifs_sb_info *cifs_sb);
 extern int CIFSSMBRenameOpenFile(const unsigned int xid, struct cifs_tcon *tcon,
-				 int netfid, const char *target_name,
+				 int netfid, const char *target_name, bool overwrite,
 				 const struct nls_table *nls_codepage,
 				 int remap_special_chars);
 int CIFSCreateHardLink(const unsigned int xid,

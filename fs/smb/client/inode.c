@@ -1793,6 +1793,7 @@ cifs_rename_pending_delete(const char *full_path, struct dentry *dentry,
 
 	/* rename the file */
 	rc = CIFSSMBRenameOpenFile(xid, tcon, fid.netfid, sillyname,
+				   true /* overwrite */,
 				   cifs_sb->local_nls,
 				   cifs_remap(cifs_sb));
 	if (rc != 0) {
@@ -1834,6 +1835,7 @@ out:
 	 */
 undo_rename:
 	CIFSSMBRenameOpenFile(xid, tcon, fid.netfid, dentry->d_name.name,
+				true /* overwrite */,
 				cifs_sb->local_nls, cifs_remap(cifs_sb));
 undo_setattr:
 	if (dosattr != origattr) {
@@ -2410,6 +2412,7 @@ cifs_do_rename(const unsigned int xid, struct dentry *from_dentry,
 	if (rc == 0) {
 		rc = CIFSSMBRenameOpenFile(xid, tcon, fid.netfid,
 				(const char *) to_dentry->d_name.name,
+				true /* overwrite */,
 				cifs_sb->local_nls, cifs_remap(cifs_sb));
 		CIFSSMBClose(xid, tcon, fid.netfid);
 	}
