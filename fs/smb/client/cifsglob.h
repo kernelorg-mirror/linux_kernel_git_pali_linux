@@ -426,6 +426,9 @@ struct smb_version_operations {
 	/* set attributes */
 	int (*set_file_info)(struct inode *, const char *, FILE_BASIC_INFO *,
 			     const unsigned int);
+	/* set file disposition (delete pending state) */
+	int (*set_file_disp)(const unsigned int xid, struct cifs_tcon *tcon,
+			     struct cifs_fid *fid, bool delete_pending);
 	int (*set_compression)(const unsigned int, struct cifs_tcon *,
 			       struct cifsFileInfo *);
 	/* check if we can send an echo or nor */

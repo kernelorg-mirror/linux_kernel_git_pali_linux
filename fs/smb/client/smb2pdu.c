@@ -5756,6 +5756,19 @@ SMB2_set_ea(const unsigned int xid, struct cifs_tcon *tcon,
 }
 
 int
+SMB2_set_disp(const unsigned int xid, struct cifs_tcon *tcon,
+	      u64 persistent_fid, u64 volatile_fid, bool delete_pending)
+{
+	__u8 disp = delete_pending;
+	__u8 *buf = &disp;
+	unsigned int len = sizeof(disp);
+
+	return send_set_info(xid, tcon, persistent_fid, volatile_fid,
+			     current->tgid, FILE_DISPOSITION_INFORMATION,
+			     SMB2_O_INFO_FILE, 0, 1, (void **)&buf, &len);
+}
+
+int
 SMB2_oplock_break(const unsigned int xid, struct cifs_tcon *tcon,
 		  const u64 persistent_fid, const u64 volatile_fid,
 		  __u8 oplock_level)

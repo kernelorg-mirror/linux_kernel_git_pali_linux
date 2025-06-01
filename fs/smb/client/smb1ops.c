@@ -1080,6 +1080,13 @@ out:
 }
 
 static int
+cifs_set_file_disp(const unsigned int xid, struct cifs_tcon *tcon,
+		   struct cifs_fid *fid, bool delete_pending)
+{
+	return CIFSSMBSetFileDisposition(xid, tcon, delete_pending, fid->netfid, current->tgid);
+}
+
+static int
 cifs_set_compression(const unsigned int xid, struct cifs_tcon *tcon,
 		   struct cifsFileInfo *cfile)
 {
@@ -1391,6 +1398,7 @@ struct smb_version_operations smb1_operations = {
 	.set_path_size = CIFSSMBSetEOF,
 	.set_file_size = CIFSSMBSetFileSize,
 	.set_file_info = smb_set_file_info,
+	.set_file_disp = cifs_set_file_disp,
 	.set_compression = cifs_set_compression,
 	.echo = CIFSSMBEcho,
 	.mkdir = CIFSSMBMkDir,
