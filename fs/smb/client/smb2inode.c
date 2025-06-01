@@ -1356,7 +1356,7 @@ smb2_unlink(const unsigned int xid, struct cifs_tcon *tcon, const char *name,
 		inode = d_inode(dentry);
 
 	oparms = CIFS_OPARMS(cifs_sb, tcon, name, DELETE,
-			     FILE_OPEN, OPEN_REPARSE_POINT, ACL_NO_MODE);
+			     FILE_OPEN, CREATE_NOT_DIR | OPEN_REPARSE_POINT, ACL_NO_MODE);
 	rc = smb2_compound_op(xid, tcon, cifs_sb, name, &oparms,
 			      NULL, &(int){SMB2_OP_UNLINK},
 			      1, NULL, NULL, NULL, dentry);
