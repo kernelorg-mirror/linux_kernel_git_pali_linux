@@ -1769,16 +1769,26 @@ cifs_rename_pending_delete(const char *full_path, struct dentry *dentry,
 	if (rc != 0)
 		goto out;
 
-	origattr = cifsInode->cifsAttrs;
+	origattr = cifsInode->cifsAttrs & ~ATTR_NORMAL;
+
+	/* clear ATTR_READONLY, needed for opening file with DELETE access */
+	dosattr = origattr & ~ATTR_READONLY;
+
+	/*
+	 * Set ATTR_HIDDEN to hide the file, but only if this is not a hardlink
+	 * because all hardlinked directory entries shares same attribues and
+	 * we do not want to mark all hardlinked entries as hidden.
+	 */
+	if (inode->i_nlink <= 1)
+		dosattr |= ATTR_HIDDEN;
+
+	/* clearing all attributes is done via ATTR_NORMAL value */
 	if (origattr == 0)
 		origattr |= ATTR_NORMAL;
-
-	dosattr = origattr & ~ATTR_READONLY;
 	if (dosattr == 0)
 		dosattr |= ATTR_NORMAL;
-	dosattr |= ATTR_HIDDEN;
 
-	/* set ATTR_HIDDEN and clear ATTR_READONLY, but only if needed */
+	/* change dosattr, but only if needed */
 	if (dosattr != origattr) {
 		info_buf.Attributes = cpu_to_le32(dosattr);
 		rc = CIFSSMBSetFileInfo(xid, tcon, &info_buf, fid.netfid,
