@@ -242,9 +242,6 @@ extern int cifs_get_inode_info_unix(struct inode **pinode,
 			struct super_block *sb, unsigned int xid);
 extern int cifs_set_file_info(struct inode *inode, struct iattr *attrs,
 			      unsigned int xid, const char *full_path, __u32 dosattr);
-extern int cifs_rename_pending_delete(const char *full_path,
-				      struct dentry *dentry,
-				      const unsigned int xid);
 extern int sid_to_id(struct cifs_sb_info *cifs_sb, struct smb_sid *psid,
 				struct cifs_fattr *fattr, uint sidtype);
 extern int cifs_acl_to_fattr(struct cifs_sb_info *cifs_sb,

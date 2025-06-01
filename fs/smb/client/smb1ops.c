@@ -1422,7 +1422,6 @@ struct smb_version_operations smb1_operations = {
 	.mkdir_setinfo = cifs_mkdir_setinfo,
 	.rmdir = CIFSSMBRmDir,
 	.unlink = CIFSSMBDelFile,
-	.rename_pending_delete = cifs_rename_pending_delete,
 	.rename = CIFSSMBRename,
 	.rename_opened_file = cifs_rename_opened_file,
 	.create_hardlink = CIFSCreateHardLink,

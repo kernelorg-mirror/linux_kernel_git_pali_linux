@@ -1684,7 +1684,6 @@ cifs_set_file_info(struct inode *inode, struct iattr *attrs, unsigned int xid,
 	return server->ops->set_file_info(inode, full_path, &info_buf, xid);
 }
 
-#ifdef CONFIG_CIFS_ALLOW_INSECURE_LEGACY
 /*
  * Open the given file (if it isn't already), set the DELETE_PENDING bit
  * and rename it to a random name that hopefully won't conflict with
@@ -1697,9 +1696,11 @@ cifs_set_file_info(struct inode *inode, struct iattr *attrs, unsigned int xid,
 #define SILLYNAME_LEN (SILLYNAME_PREFIX_LEN + \
 		SILLYNAME_FILEID_LEN + \
 		SILLYNAME_COUNTER_LEN)
-int
-cifs_rename_pending_delete(const char *full_path, struct dentry *dentry,
-			   const unsigned int xid)
+static int
+cifs_rename_pending_delete(const unsigned int xid,
+			   struct cifs_tcon *tcon,
+			   const char *full_path,
+			   struct dentry *dentry)
 {
 	int oplock = 0;
 	int rc;
@@ -1708,8 +1709,6 @@ cifs_rename_pending_delete(const char *full_path, struct dentry *dentry,
 	struct inode *inode = d_inode(dentry);
 	struct cifsInodeInfo *cifsInode = CIFS_I(inode);
 	struct cifs_sb_info *cifs_sb = CIFS_SB(inode->i_sb);
-	struct tcon_link *tlink;
-	struct cifs_tcon *tcon;
 	__u32 dosattr, origattr;
 	char *sillyname_full_path = NULL;
 	bool can_rename_opened_file = true;
@@ -1718,11 +1717,6 @@ cifs_rename_pending_delete(const char *full_path, struct dentry *dentry,
 	int sillyname_len;
 	const char *dirpath_end;
 	size_t dirpath_len;
-
-	tlink = cifs_sb_tlink(cifs_sb);
-	if (IS_ERR(tlink))
-		return PTR_ERR(tlink);
-	tcon = tlink_tcon(tlink);
 
 	/* construct random name ".smb<inodenum><counter>" */
 	while (true) {
@@ -1753,8 +1747,10 @@ cifs_rename_pending_delete(const char *full_path, struct dentry *dentry,
 	/*
 	 * We cannot rename the opened file if the SMB1 server doesn't
 	 * support CAP_INFOLEVEL_PASSTHRU. But we can rename file via path.
+	 * SMB2+ always supports renaming of the opened file.
 	 */
-	if (!(tcon->ses->capabilities & CAP_INFOLEVEL_PASSTHRU))
+	if (tcon->ses->server->vals->protocol_id == SMB10_PROT_ID &&
+	    !(tcon->ses->capabilities & CAP_INFOLEVEL_PASSTHRU))
 		can_rename_opened_file = false;
 
 	dirpath_end = strrchr(full_path, CIFS_DIR_SEP(cifs_sb));
@@ -1821,16 +1817,16 @@ cifs_rename_pending_delete(const char *full_path, struct dentry *dentry,
 		.fid = &fid,
 	};
 
-	rc = CIFS_open(xid, &oparms, &oplock, NULL);
+	rc = tcon->ses->server->ops->open(xid, &oparms, &oplock, NULL);
 	if (rc != 0)
 		goto undo_rename_path;
 
 	/* rename the opened file (if it was not already renamed before the open) */
 	if (can_rename_opened_file) {
-		rc = CIFSSMBRenameOpenFile(xid, tcon, fid.netfid, sillyname,
+		rc = tcon->ses->server->ops->rename_opened_file(
+				   xid, tcon, &fid, sillyname_full_path,
 				   false /* overwrite */,
-				   cifs_sb->local_nls,
-				   cifs_remap(cifs_sb));
+				   cifs_sb);
 		if (rc != 0) {
 			rc = -EBUSY;
 			goto undo_close;
@@ -1839,8 +1835,7 @@ cifs_rename_pending_delete(const char *full_path, struct dentry *dentry,
 
 	/* try to set DELETE_PENDING */
 	if (!test_bit(CIFS_INO_DELETE_PENDING, &cifsInode->flags)) {
-		rc = CIFSSMBSetFileDisposition(xid, tcon, true, fid.netfid,
-					       current->tgid);
+		rc = tcon->ses->server->ops->set_file_disp(xid, tcon, &fid, true);
 		/*
 		 * some samba versions return -ENOENT when we try to set the
 		 * file disposition here. Likely a samba bug, but work around
@@ -1856,11 +1851,10 @@ cifs_rename_pending_delete(const char *full_path, struct dentry *dentry,
 		set_bit(CIFS_INO_DELETE_PENDING, &cifsInode->flags);
 	}
 
-	CIFSSMBClose(xid, tcon, fid.netfid);
+	tcon->ses->server->ops->close(xid, tcon, &fid);
 
 out:
 	kfree(sillyname_full_path);
-	cifs_put_tlink(tlink);
 	return rc;
 
 	/*
@@ -1870,14 +1864,16 @@ out:
 	 */
 undo_rename_opened_file:
 	if (can_rename_opened_file)
-		CIFSSMBRenameOpenFile(xid, tcon, fid.netfid, dentry->d_name.name,
+		tcon->ses->server->ops->rename_opened_file(
+				xid, tcon, &fid, full_path,
 				true /* overwrite */,
-				cifs_sb->local_nls, cifs_remap(cifs_sb));
+				cifs_sb);
 undo_close:
-	CIFSSMBClose(xid, tcon, fid.netfid);
+	tcon->ses->server->ops->close(xid, tcon, &fid);
 undo_rename_path:
 	if (!can_rename_opened_file)
-		CIFSSMBRename(xid, tcon, dentry,
+		tcon->ses->server->ops->rename(
+				xid, tcon, dentry,
 				sillyname_full_path,
 				full_path,
 				cifs_sb);
@@ -1888,7 +1884,6 @@ undo_setattr:
 	}
 	goto out;
 }
-#endif /* CONFIG_CIFS_ALLOW_INSECURE_LEGACY */
 
 /* copied from fs/nfs/dir.c with small changes */
 static void
@@ -2008,13 +2003,10 @@ psx_del_no_retry:
 		if (simple_positive(dentry))
 			d_delete(dentry);
 	} else if (rc == -EBUSY) {
-		if (server->ops->rename_pending_delete) {
-			rc = server->ops->rename_pending_delete(full_path,
-								dentry, xid);
-			if (rc == 0) {
-				cifs_mark_open_handles_for_deleted_file(inode, full_path);
-				cifs_drop_nlink(inode);
-			}
+		rc = cifs_rename_pending_delete(xid, tcon, full_path, dentry);
+		if (rc == 0) {
+			cifs_mark_open_handles_for_deleted_file(inode, full_path);
+			cifs_drop_nlink(inode);
 		}
 	} else if ((rc == -EACCES) && (dosattr == 0) && inode) {
 		attrs = kzalloc(sizeof(*attrs), GFP_KERNEL);
