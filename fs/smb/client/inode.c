@@ -1711,7 +1711,7 @@ cifs_rename_pending_delete(const char *full_path, struct dentry *dentry,
 	struct tcon_link *tlink;
 	struct cifs_tcon *tcon;
 	__u32 dosattr, origattr;
-	FILE_BASIC_INFO *info_buf = NULL;
+	FILE_BASIC_INFO info_buf = {};
 	unsigned char sillyname[SILLYNAME_LEN + 1];
 	int sillyname_len;
 
@@ -1780,13 +1780,8 @@ cifs_rename_pending_delete(const char *full_path, struct dentry *dentry,
 
 	/* set ATTR_HIDDEN and clear ATTR_READONLY, but only if needed */
 	if (dosattr != origattr) {
-		info_buf = kzalloc(sizeof(*info_buf), GFP_KERNEL);
-		if (info_buf == NULL) {
-			rc = -ENOMEM;
-			goto out_close;
-		}
-		info_buf->Attributes = cpu_to_le32(dosattr);
-		rc = CIFSSMBSetFileInfo(xid, tcon, info_buf, fid.netfid,
+		info_buf.Attributes = cpu_to_le32(dosattr);
+		rc = CIFSSMBSetFileInfo(xid, tcon, &info_buf, fid.netfid,
 					current->tgid);
 		/* although we would like to mark the file hidden
  		   if that fails we will still try to rename it */
@@ -1829,7 +1824,6 @@ cifs_rename_pending_delete(const char *full_path, struct dentry *dentry,
 out_close:
 	CIFSSMBClose(xid, tcon, fid.netfid);
 out:
-	kfree(info_buf);
 	cifs_put_tlink(tlink);
 	return rc;
 
@@ -1843,8 +1837,8 @@ undo_rename:
 				cifs_sb->local_nls, cifs_remap(cifs_sb));
 undo_setattr:
 	if (dosattr != origattr) {
-		info_buf->Attributes = cpu_to_le32(origattr);
-		if (!CIFSSMBSetFileInfo(xid, tcon, info_buf, fid.netfid,
+		info_buf.Attributes = cpu_to_le32(origattr);
+		if (!CIFSSMBSetFileInfo(xid, tcon, &info_buf, fid.netfid,
 					current->tgid))
 			cifsInode->cifsAttrs = origattr;
 	}
