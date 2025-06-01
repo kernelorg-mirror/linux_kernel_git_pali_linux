@@ -1348,6 +1348,23 @@ smb2_remove(const unsigned int xid, struct cifs_tcon *tcon, const char *name,
 		op_flags = CREATE_NOT_FILE;
 	else
 		op_flags = CREATE_NOT_DIR | OPEN_REPARSE_POINT;
+
+	/*
+	 * CREATE_OPTION_EXCLUSIVE ensures exclusive access to the path.
+	 * If some other client has that path opened then our open fails.
+	 * So together with remove operation it cause that either the path
+	 * is immediately unlinked or the command fails with -EBUSY.
+	 * It should not let the path in the delete pending state.
+	 *
+	 * When using POSIX extensions then we do not need any exclusive
+	 * access to the file or directory.
+	 * In this case the path is unlinked immediately even if it is opened
+	 * by other client. Unlink fails only in case path is directory and
+	 * that directory is not empty.
+	 */
+	if (!tcon->posix_extensions)
+		op_flags |= CREATE_OPTION_EXCLUSIVE;
+
 	oparms = CIFS_OPARMS(cifs_sb, tcon, name, DELETE,
 			     FILE_OPEN, op_flags, ACL_NO_MODE);
 	rc = smb2_compound_op(xid, tcon, cifs_sb, name, &oparms,
