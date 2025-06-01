@@ -627,7 +627,7 @@ static int cifs_query_path_info(const unsigned int xid,
 				fi.EndOfFile = di->EndOfFile;
 				fi.EASize = di->EaSize;
 			}
-			fi.NumberOfLinks = cpu_to_le32(1);
+			fi.NumberOfLinks = cpu_to_le32(0); /* trigger CIFS_FATTR_UNKNOWN_NLINK */
 			/*
 			 * Do not change fi.DeletePending as it is set by the above
 			 * CIFSSMBQPathInfo() call even on error. By default it is

@@ -1163,7 +1163,7 @@ OldOpenRetry:
 			pfile_info->AllocationSize =
 				cpu_to_le64(le32_to_cpu(pSMBr->EndOfFile));
 			pfile_info->EndOfFile = pfile_info->AllocationSize;
-			pfile_info->NumberOfLinks = cpu_to_le32(1);
+			pfile_info->NumberOfLinks = cpu_to_le32(0); /* CIFS_FATTR_UNKNOWN_NLINK */
 			pfile_info->DeletePending = 0; /* successful open = not delete pending */
 		}
 	}
@@ -1288,7 +1288,7 @@ openRetry:
 		/* the file_info buf is endian converted by caller */
 		buf->AllocationSize = rsp->AllocationSize;
 		buf->EndOfFile = rsp->EndOfFile;
-		buf->NumberOfLinks = cpu_to_le32(1);
+		buf->NumberOfLinks = cpu_to_le32(0); /* trigger CIFS_FATTR_UNKNOWN_NLINK */
 		buf->DeletePending = 0; /* successful open = not delete pending */
 	}
 

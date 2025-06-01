@@ -3276,7 +3276,7 @@ replay_again:
 		buf->AllocationSize = rsp->AllocationSize;
 		buf->EndOfFile = rsp->EndofFile;
 		buf->Attributes = rsp->FileAttributes;
-		buf->NumberOfLinks = cpu_to_le32(1);
+		buf->NumberOfLinks = cpu_to_le32(0); /* trigger CIFS_FATTR_UNKNOWN_NLINK */
 		buf->DeletePending = 0; /* successful open = not delete pending */
 	}
 
