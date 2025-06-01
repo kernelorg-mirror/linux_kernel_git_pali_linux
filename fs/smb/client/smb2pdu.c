@@ -5769,6 +5769,34 @@ SMB2_set_disp(const unsigned int xid, struct cifs_tcon *tcon,
 }
 
 int
+SMB2_set_full_path(const unsigned int xid, struct cifs_tcon *tcon,
+		   u64 persistent_fid, u64 volatile_fid, const char *new_full_path,
+		   bool overwrite, struct cifs_sb_info *cifs_sb)
+{
+	struct smb2_file_rename_info rename_info = {};
+	unsigned int size[2];
+	void *data[2];
+	int rc;
+
+	data[1] = cifs_convert_path_to_utf16(new_full_path, cifs_sb);
+	if (!data[1])
+		return -ENOMEM;
+	size[1] = 2 * UniStrnlen((wchar_t *)data[1], PATH_MAX);
+
+	rename_info.ReplaceIfExists = overwrite;
+	rename_info.RootDirectory = 0;
+	rename_info.FileNameLength = cpu_to_le32(size[1]);
+	data[0] = &rename_info;
+	size[0] = sizeof(rename_info);
+
+	rc = send_set_info(xid, tcon, persistent_fid, volatile_fid,
+			   current->tgid, FILE_RENAME_INFORMATION,
+			   SMB2_O_INFO_FILE, 0, 2, data, size);
+	kfree(data[1]);
+	return rc;
+}
+
+int
 SMB2_oplock_break(const unsigned int xid, struct cifs_tcon *tcon,
 		  const u64 persistent_fid, const u64 volatile_fid,
 		  __u8 oplock_level)

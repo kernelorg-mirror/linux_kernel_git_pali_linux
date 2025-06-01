@@ -1087,6 +1087,23 @@ cifs_set_file_disp(const unsigned int xid, struct cifs_tcon *tcon,
 }
 
 static int
+cifs_rename_opened_file(const unsigned int xid, struct cifs_tcon *tcon,
+			struct cifs_fid *fid, const char *new_full_path,
+			bool overwrite, struct cifs_sb_info *cifs_sb)
+{
+	const char *name;
+
+	/* CIFSSMBRenameOpenFile() requires just new basename of the file */
+	name = strrchr(new_full_path, CIFS_DIR_SEP(cifs_sb));
+	if (name)
+		name++;
+	else
+		name = new_full_path;
+	return CIFSSMBRenameOpenFile(xid, tcon, fid->netfid, name, overwrite,
+				     cifs_sb->local_nls, cifs_remap(cifs_sb));
+}
+
+static int
 cifs_set_compression(const unsigned int xid, struct cifs_tcon *tcon,
 		   struct cifsFileInfo *cfile)
 {
@@ -1407,6 +1424,7 @@ struct smb_version_operations smb1_operations = {
 	.unlink = CIFSSMBDelFile,
 	.rename_pending_delete = cifs_rename_pending_delete,
 	.rename = CIFSSMBRename,
+	.rename_opened_file = cifs_rename_opened_file,
 	.create_hardlink = CIFSCreateHardLink,
 	.query_symlink = cifs_query_symlink,
 	.get_reparse_point_buffer = cifs_get_reparse_point_buffer,

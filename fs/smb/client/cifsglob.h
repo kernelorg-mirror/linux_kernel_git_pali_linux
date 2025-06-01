@@ -462,6 +462,10 @@ struct smb_version_operations {
 		      struct dentry *source_dentry,
 		      const char *from_name, const char *to_name,
 		      struct cifs_sb_info *cifs_sb);
+	/* send rename request for opened file */
+	int (*rename_opened_file)(const unsigned int xid, struct cifs_tcon *tcon,
+				  struct cifs_fid *fid, const char *new_full_path,
+				  bool overwrite, struct cifs_sb_info *cifs_sb);
 	/* send create hardlink request */
 	int (*create_hardlink)(const unsigned int xid,
 			       struct cifs_tcon *tcon,

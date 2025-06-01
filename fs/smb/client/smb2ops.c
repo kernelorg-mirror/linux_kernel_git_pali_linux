@@ -1532,6 +1532,15 @@ smb2_set_file_disp(const unsigned int xid, struct cifs_tcon *tcon,
 }
 
 static int
+smb2_rename_opened_file(const unsigned int xid, struct cifs_tcon *tcon,
+			struct cifs_fid *fid, const char *new_full_path,
+			bool overwrite, struct cifs_sb_info *cifs_sb)
+{
+	return SMB2_set_full_path(xid, tcon, fid->persistent_fid, fid->volatile_fid,
+				  new_full_path, overwrite, cifs_sb);
+}
+
+static int
 SMB2_request_res_key(const unsigned int xid, struct cifs_tcon *tcon,
 		     u64 persistent_fid, u64 volatile_fid,
 		     struct copychunk_ioctl *pcchunk)
@@ -5355,6 +5364,7 @@ struct smb_version_operations smb20_operations = {
 	.rmdir = smb2_rmdir,
 	.unlink = smb2_unlink,
 	.rename = smb2_rename_path,
+	.rename_opened_file = smb2_rename_opened_file,
 	.create_hardlink = smb2_create_hardlink,
 	.get_reparse_point_buffer = smb2_get_reparse_point_buffer,
 	.query_mf_symlink = smb3_query_mf_symlink,
@@ -5460,6 +5470,7 @@ struct smb_version_operations smb21_operations = {
 	.rmdir = smb2_rmdir,
 	.unlink = smb2_unlink,
 	.rename = smb2_rename_path,
+	.rename_opened_file = smb2_rename_opened_file,
 	.create_hardlink = smb2_create_hardlink,
 	.get_reparse_point_buffer = smb2_get_reparse_point_buffer,
 	.query_mf_symlink = smb3_query_mf_symlink,
@@ -5569,6 +5580,7 @@ struct smb_version_operations smb30_operations = {
 	.rmdir = smb2_rmdir,
 	.unlink = smb2_unlink,
 	.rename = smb2_rename_path,
+	.rename_opened_file = smb2_rename_opened_file,
 	.create_hardlink = smb2_create_hardlink,
 	.get_reparse_point_buffer = smb2_get_reparse_point_buffer,
 	.query_mf_symlink = smb3_query_mf_symlink,
@@ -5687,6 +5699,7 @@ struct smb_version_operations smb311_operations = {
 	.rmdir = smb2_rmdir,
 	.unlink = smb2_unlink,
 	.rename = smb2_rename_path,
+	.rename_opened_file = smb2_rename_opened_file,
 	.create_hardlink = smb2_create_hardlink,
 	.get_reparse_point_buffer = smb2_get_reparse_point_buffer,
 	.query_mf_symlink = smb3_query_mf_symlink,
