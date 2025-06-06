@@ -604,7 +604,8 @@ cifs_symlink(struct mnt_idmap *idmap, struct inode *inode,
 
 	case CIFS_SYMLINK_TYPE_NATIVE:
 	case CIFS_SYMLINK_TYPE_NFS:
-	case CIFS_SYMLINK_TYPE_WSL:
+	case CIFS_SYMLINK_TYPE_WSL1:
+	case CIFS_SYMLINK_TYPE_WSL2:
 		if (CIFS_REPARSE_SUPPORT(pTcon)) {
 			rc = create_reparse_symlink(xid, inode, direntry, pTcon,
 						    full_path, symname);

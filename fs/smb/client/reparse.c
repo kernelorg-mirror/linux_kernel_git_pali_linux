@@ -22,7 +22,7 @@ static int mknod_nfs(unsigned int xid, struct inode *inode,
 static int mknod_wsl(unsigned int xid, struct inode *inode,
 		     struct dentry *dentry, struct cifs_tcon *tcon,
 		     const char *full_path, umode_t mode, dev_t dev,
-		     const char *symname);
+		     const char *symname, int symver);
 
 static int create_native_symlink(const unsigned int xid, struct inode *inode,
 				 struct dentry *dentry, struct cifs_tcon *tcon,
@@ -43,8 +43,10 @@ int create_reparse_symlink(const unsigned int xid, struct inode *inode,
 		return create_native_symlink(xid, inode, dentry, tcon, full_path, symname);
 	case CIFS_SYMLINK_TYPE_NFS:
 		return mknod_nfs(xid, inode, dentry, tcon, full_path, S_IFLNK, 0, symname);
-	case CIFS_SYMLINK_TYPE_WSL:
-		return mknod_wsl(xid, inode, dentry, tcon, full_path, S_IFLNK, 0, symname);
+	case CIFS_SYMLINK_TYPE_WSL1:
+		return mknod_wsl(xid, inode, dentry, tcon, full_path, S_IFLNK, 0, symname, 1);
+	case CIFS_SYMLINK_TYPE_WSL2:
+		return mknod_wsl(xid, inode, dentry, tcon, full_path, S_IFLNK, 0, symname, 2);
 	default:
 		return -EOPNOTSUPP;
 	}
@@ -554,6 +556,7 @@ out:
 
 static int wsl_set_reparse_buf(struct reparse_data_buffer **buf,
 			       mode_t mode, const char *symname,
+			       int symver,
 			       struct cifs_sb_info *cifs_sb,
 			       struct kvec *iov)
 {
@@ -589,15 +592,20 @@ static int wsl_set_reparse_buf(struct reparse_data_buffer **buf,
 			kfree(symname_utf16);
 			return -ENOMEM;
 		}
-		/* Version field must be set to 2 (MS-FSCC 2.1.2.7) */
-		symlink_buf->Version = cpu_to_le32(2);
-		/* Target for Version 2 is in UTF-8 but without trailing null-term byte */
+		symlink_buf->Version = cpu_to_le32(symver);
+		/* Target is in UTF-8 but without trailing null-term byte */
 		symname_utf8_len = utf16s_to_utf8s((wchar_t *)symname_utf16, symname_utf16_len/2,
 						   UTF16_LITTLE_ENDIAN,
 						   symlink_buf->Target,
 						   symname_utf8_maxlen);
 		*buf = (struct reparse_data_buffer *)symlink_buf;
-		buf_len = sizeof(struct reparse_wsl_symlink_data_buffer) + symname_utf8_len;
+		buf_len = sizeof(struct reparse_wsl_symlink_data_buffer);
+		/*
+		 * Layout version 2 stores the symlink target in the reparse point buffer.
+		 * Layout version 1 stores the symlink target in the data section of the file.
+		 */
+		if (symver == 2)
+			buf_len += symname_utf8_len;
 		kfree(symname_utf16);
 		break;
 	default:
@@ -698,7 +706,7 @@ static int wsl_set_xattrs(struct inode *inode, umode_t _mode,
 static int mknod_wsl(unsigned int xid, struct inode *inode,
 		     struct dentry *dentry, struct cifs_tcon *tcon,
 		     const char *full_path, umode_t mode, dev_t dev,
-		     const char *symname)
+		     const char *symname, int symver)
 {
 	struct cifs_sb_info *cifs_sb = CIFS_SB(inode->i_sb);
 	struct cifs_open_info_data data;
@@ -707,6 +715,12 @@ static int mknod_wsl(unsigned int xid, struct inode *inode,
 	struct inode *new;
 	unsigned int len;
 	struct kvec reparse_iov, xattr_iov;
+	struct cifs_open_parms oparms;
+	struct cifs_io_parms io_parms;
+	unsigned int bytes_written;
+	struct kvec symv1_iov[2];
+	struct cifs_fid fid;
+	__u32 oplock;
 	int rc;
 
 	/*
@@ -716,7 +730,7 @@ static int mknod_wsl(unsigned int xid, struct inode *inode,
 	if (!(le32_to_cpu(tcon->fsAttrInfo.Attributes) & FILE_SUPPORTS_EXTENDED_ATTRIBUTES))
 		return -EOPNOTSUPP;
 
-	rc = wsl_set_reparse_buf(&buf, mode, symname, cifs_sb, &reparse_iov);
+	rc = wsl_set_reparse_buf(&buf, mode, symname, symver, cifs_sb, &reparse_iov);
 	if (rc)
 		return rc;
 
@@ -741,6 +755,46 @@ static int mknod_wsl(unsigned int xid, struct inode *inode,
 				     &data, inode->i_sb,
 				     xid, tcon, full_path, false,
 				     &reparse_iov, &xattr_iov);
+	if (!IS_ERR(new) && mode == S_IFLNK && symver == 1) {
+		/*
+		 * WSL symlink layout version 1 stores the symlink target
+		 * location into the data section of the file.
+		 * Store it now after the reparse point file was created.
+		 * The target location was allocated into the buf but iov
+		 * size filled in reparse_iov by wsl_set_reparse_buf() was
+		 * set to smaller so the created reparse point does not
+		 * contain it.
+		 */
+		oparms = CIFS_OPARMS(cifs_sb, tcon, full_path, FILE_WRITE_DATA,
+				     FILE_OPEN, CREATE_NOT_DIR | OPEN_REPARSE_POINT,
+				     ACL_NO_MODE);
+		oparms.fid = &fid;
+		oplock = tcon->ses->server->oplocks ? REQ_OPLOCK : 0;
+		rc = tcon->ses->server->ops->open(xid, &oparms, &oplock, NULL);
+		if (!rc) {
+			symv1_iov[1].iov_base = ((struct reparse_wsl_symlink_data_buffer *)buf)->Target;
+			symv1_iov[1].iov_len = strlen((const char *)symv1_iov[1].iov_base);
+			io_parms = (struct cifs_io_parms) {
+				.netfid = fid.netfid,
+				.pid = current->tgid,
+				.tcon = tcon,
+				.offset = 0,
+				.length = symv1_iov[1].iov_len,
+			};
+			rc = tcon->ses->server->ops->sync_write(xid, &fid, &io_parms,
+								&bytes_written,
+								symv1_iov,
+								ARRAY_SIZE(symv1_iov)-1);
+			if (bytes_written != symv1_iov[1].iov_len)
+				rc = -EIO;
+			tcon->ses->server->ops->close(xid, tcon, &fid);
+		}
+		if (rc) {
+			tcon->ses->server->ops->unlink(xid, tcon, full_path, cifs_sb, NULL);
+			iput(new);
+			new = ERR_PTR(rc);
+		}
+	}
 	if (!IS_ERR(new))
 		d_instantiate(dentry, new);
 	else
@@ -764,7 +818,7 @@ int mknod_reparse(unsigned int xid, struct inode *inode,
 	case CIFS_REPARSE_TYPE_NFS:
 		return mknod_nfs(xid, inode, dentry, tcon, full_path, mode, dev, NULL);
 	case CIFS_REPARSE_TYPE_WSL:
-		return mknod_wsl(xid, inode, dentry, tcon, full_path, mode, dev, NULL);
+		return mknod_wsl(xid, inode, dentry, tcon, full_path, mode, dev, NULL, 0);
 	default:
 		return -EOPNOTSUPP;
 	}

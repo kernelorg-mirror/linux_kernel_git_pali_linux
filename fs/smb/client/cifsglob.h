@@ -190,7 +190,8 @@ enum cifs_symlink_type {
 	CIFS_SYMLINK_TYPE_MFSYMLINKS,
 	CIFS_SYMLINK_TYPE_SFU,
 	CIFS_SYMLINK_TYPE_NFS,
-	CIFS_SYMLINK_TYPE_WSL,
+	CIFS_SYMLINK_TYPE_WSL1,
+	CIFS_SYMLINK_TYPE_WSL2,
 };
 
 static inline const char *cifs_symlink_type_str(enum cifs_symlink_type type)
@@ -208,8 +209,10 @@ static inline const char *cifs_symlink_type_str(enum cifs_symlink_type type)
 		return "sfu";
 	case CIFS_SYMLINK_TYPE_NFS:
 		return "nfs";
-	case CIFS_SYMLINK_TYPE_WSL:
-		return "wsl";
+	case CIFS_SYMLINK_TYPE_WSL1:
+		return "wsl1";
+	case CIFS_SYMLINK_TYPE_WSL2:
+		return "wsl2";
 	default:
 		return "unknown";
 	}

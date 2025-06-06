@@ -376,7 +376,9 @@ static const match_table_t symlink_flavor_tokens = {
 	{ Opt_symlink_mfsymlinks,	"mfsymlinks" },
 	{ Opt_symlink_sfu,		"sfu" },
 	{ Opt_symlink_nfs,		"nfs" },
-	{ Opt_symlink_wsl,		"wsl" },
+	{ Opt_symlink_wsl1,		"wsl1" },
+	{ Opt_symlink_wsl2,		"wsl2" },
+	{ Opt_symlink_wsl2,		"wsl" }, /* wsl - alias for wsl2 */
 	{ Opt_symlink_err,		NULL },
 };
 
@@ -407,8 +409,11 @@ static int parse_symlink_flavor(struct fs_context *fc, char *value,
 	case Opt_symlink_nfs:
 		ctx->symlink_type = CIFS_SYMLINK_TYPE_NFS;
 		break;
-	case Opt_symlink_wsl:
-		ctx->symlink_type = CIFS_SYMLINK_TYPE_WSL;
+	case Opt_symlink_wsl1:
+		ctx->symlink_type = CIFS_SYMLINK_TYPE_WSL1;
+		break;
+	case Opt_symlink_wsl2:
+		ctx->symlink_type = CIFS_SYMLINK_TYPE_WSL2;
 		break;
 	default:
 		cifs_errorf(fc, "bad symlink= option: %s\n", value);

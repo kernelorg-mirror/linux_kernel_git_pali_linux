@@ -72,7 +72,8 @@ enum cifs_symlink_parm {
 	Opt_symlink_mfsymlinks,
 	Opt_symlink_sfu,
 	Opt_symlink_nfs,
-	Opt_symlink_wsl,
+	Opt_symlink_wsl1,
+	Opt_symlink_wsl2,
 	Opt_symlink_err
 };
 
