@@ -1956,17 +1956,6 @@ static int __cifs_unlink(struct inode *dir, struct dentry *dentry, bool sillyren
 
 	netfs_wait_for_outstanding_io(inode);
 	cifs_close_deferred_file_under_dentry(tcon, dentry);
-#ifdef CONFIG_CIFS_ALLOW_INSECURE_LEGACY
-	if (cap_unix(tcon->ses) && (CIFS_UNIX_POSIX_PATH_OPS_CAP &
-				le64_to_cpu(tcon->fsUnixInfo.Capability))) {
-		rc = CIFSPOSIXDelFile(xid, tcon, full_path,
-			SMB_POSIX_UNLINK_FILE_TARGET, cifs_sb->local_nls,
-			cifs_remap(cifs_sb));
-		cifs_dbg(FYI, "posix del rc %d\n", rc);
-		if ((rc == 0) || (rc == -ENOENT))
-			goto psx_del_no_retry;
-	}
-#endif /* CONFIG_CIFS_ALLOW_INSECURE_LEGACY */
 
 retry_std_delete:
 	if (!server->ops->unlink) {

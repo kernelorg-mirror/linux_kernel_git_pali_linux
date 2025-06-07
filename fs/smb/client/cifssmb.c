@@ -768,6 +768,18 @@ CIFSSMBDelFile(const unsigned int xid, struct cifs_tcon *tcon, const char *name,
 	int name_len;
 	int remap = cifs_remap(cifs_sb);
 
+	/* If UNIX extensions are available then use UNIX UNLINK call. */
+	if (cap_unix(tcon->ses) &&
+	    (le64_to_cpu(tcon->fsUnixInfo.Capability) & CIFS_UNIX_POSIX_PATH_OPS_CAP)) {
+		rc = CIFSPOSIXDelFile(xid, tcon, name,
+				      SMB_POSIX_UNLINK_FILE_TARGET,
+				      cifs_sb->local_nls,
+				      cifs_remap(cifs_sb));
+		cifs_dbg(FYI, "posix del rc %d\n", rc);
+		if (rc == 0 || rc == -ENOENT)
+			return rc;
+	}
+
 DelFileRetry:
 	rc = smb_init(SMB_COM_DELETE, 1, tcon, (void **) &pSMB,
 		      (void **) &pSMBr);
