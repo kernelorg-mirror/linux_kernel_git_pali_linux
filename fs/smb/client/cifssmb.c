@@ -823,8 +823,53 @@ CIFSSMBRmDir(const unsigned int xid, struct cifs_tcon *tcon, const char *name,
 	int bytes_returned;
 	int name_len;
 	int remap = cifs_remap(cifs_sb);
+	struct cifs_open_parms oparms;
+	struct cifs_fid fid;
+	int oplock;
 
 	cifs_dbg(FYI, "In CIFSSMBRmDir\n");
+
+	/*
+	 * Do not send SMB_COM_DELETE_DIRECTORY to NT servers. NT servers just
+	 * sets the DELETE PENDING state on the directory and in case that
+	 * directory is opened by some other client, it stay in this state and
+	 * direntry stay present in the parent directory.
+	 *
+	 * So for NT servers use NT OPEN in exclusive mode. It fails when some
+	 * other SMB client has the directory opened, and it triggers the
+	 * sillyrename code path. After successful NT OPEN in exclusive mode,
+	 * sets the DELETE PENDING state and close the directory.
+	 *
+	 * Servers with UNIX extensions should support SMB_COM_DELETE_DIRECTORY
+	 * with correct UNIX semantics, so use this NT OPEN + DELETE PENDING
+	 * only against non-UNIX NT servers.
+	 */
+	if ((tcon->ses->capabilities & CAP_NT_SMBS) &&
+	    !(cap_unix(tcon->ses) &&
+	      (le64_to_cpu(tcon->fsUnixInfo.Capability) & CIFS_UNIX_POSIX_PATH_OPS_CAP))) {
+		oparms = CIFS_OPARMS(cifs_sb, tcon, name, DELETE, FILE_OPEN,
+				     CREATE_OPTION_EXCLUSIVE | CREATE_NOT_FILE | OPEN_REPARSE_POINT,
+				     ACL_NO_MODE);
+		oparms.fid = &fid;
+		oplock = 0;
+		rc = CIFS_open(xid, &oparms, &oplock, NULL);
+		if (rc)
+			return rc;
+		rc = CIFSSMBSetFileDisposition(xid, tcon, true, fid.netfid, current->tgid);
+		/*
+		 * some samba versions return -ENOENT when we try to set the
+		 * file disposition here. Likely a samba bug, but work around
+		 * it for now. This means that some cifsXXX files may hang
+		 * around after they shouldn't.
+		 *
+		 * BB: remove this hack after more servers have the fix
+		 */
+		if (rc == -ENOENT)
+			rc = 0;
+		CIFSSMBClose(xid, tcon, fid.netfid);
+		return rc;
+	}
+
 RmDirRetry:
 	rc = smb_init(SMB_COM_DELETE_DIRECTORY, 0, tcon, (void **) &pSMB,
 		      (void **) &pSMBr);
