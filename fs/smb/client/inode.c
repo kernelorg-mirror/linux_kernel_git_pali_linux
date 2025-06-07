@@ -1700,6 +1700,7 @@ static int
 cifs_rename_pending_delete(const unsigned int xid,
 			   struct cifs_tcon *tcon,
 			   const char *full_path,
+			   bool is_dir,
 			   struct dentry *dentry)
 {
 	int oplock = 0;
@@ -1811,7 +1812,8 @@ cifs_rename_pending_delete(const unsigned int xid,
 		.tcon = tcon,
 		.cifs_sb = cifs_sb,
 		.desired_access = DELETE,
-		.create_options = cifs_create_options(cifs_sb, CREATE_NOT_DIR),
+		.create_options = cifs_create_options(cifs_sb,
+					is_dir ? CREATE_NOT_FILE : CREATE_NOT_DIR),
 		.disposition = FILE_OPEN,
 		.path = full_path,
 		.fid = &fid,
@@ -1992,7 +1994,7 @@ psx_del_no_retry:
 		if (simple_positive(dentry))
 			d_delete(dentry);
 	} else if (rc == -EBUSY) {
-		rc = cifs_rename_pending_delete(xid, tcon, full_path, dentry);
+		rc = cifs_rename_pending_delete(xid, tcon, full_path, false /* is_dir */, dentry);
 		if (rc == 0) {
 			cifs_mark_open_handles_for_deleted_file(inode, full_path);
 			cifs_drop_nlink(inode);
@@ -2335,6 +2337,9 @@ int cifs_rmdir(struct inode *inode, struct dentry *direntry)
 	}
 
 	rc = server->ops->rmdir(xid, tcon, full_path, cifs_sb);
+	if (rc == -EBUSY)
+		rc = cifs_rename_pending_delete(xid, tcon, full_path, true /* is_dir */, direntry);
+
 	cifs_put_tlink(tlink);
 
 	cifsInode = CIFS_I(d_inode(direntry));
