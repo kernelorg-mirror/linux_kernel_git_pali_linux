@@ -1329,38 +1329,31 @@ smb2_mkdir_setinfo(struct inode *inode, const char *name,
 		cifs_i->cifsAttrs = dosattrs;
 }
 
-int
-smb2_rmdir(const unsigned int xid, struct cifs_tcon *tcon, const char *name,
-	   struct cifs_sb_info *cifs_sb)
-{
-	struct cifs_open_parms oparms;
-
-	drop_cached_dir_by_name(xid, tcon, name, cifs_sb);
-	oparms = CIFS_OPARMS(cifs_sb, tcon, name, DELETE,
-			     FILE_OPEN, CREATE_NOT_FILE, ACL_NO_MODE);
-	return smb2_compound_op(xid, tcon, cifs_sb,
-				name, &oparms, NULL,
-				&(int){SMB2_OP_UNLINK}, 1,
-				NULL, NULL, NULL, NULL);
-}
-
-int
-smb2_unlink(const unsigned int xid, struct cifs_tcon *tcon, const char *name,
-	    struct cifs_sb_info *cifs_sb, struct dentry *dentry)
+static int
+smb2_remove(const unsigned int xid, struct cifs_tcon *tcon, const char *name,
+	    struct cifs_sb_info *cifs_sb, struct dentry *dentry, bool is_dir)
 {
 	struct cifs_open_parms oparms;
 	struct inode *inode = NULL;
+	int op_flags;
 	int rc;
 
 	if (dentry)
 		inode = d_inode(dentry);
 
+	if (is_dir)
+		drop_cached_dir_by_name(xid, tcon, name, cifs_sb);
+
+	if (is_dir)
+		op_flags = CREATE_NOT_FILE;
+	else
+		op_flags = CREATE_NOT_DIR | OPEN_REPARSE_POINT;
 	oparms = CIFS_OPARMS(cifs_sb, tcon, name, DELETE,
-			     FILE_OPEN, CREATE_NOT_DIR | OPEN_REPARSE_POINT, ACL_NO_MODE);
+			     FILE_OPEN, op_flags, ACL_NO_MODE);
 	rc = smb2_compound_op(xid, tcon, cifs_sb, name, &oparms,
 			      NULL, &(int){SMB2_OP_UNLINK},
 			      1, NULL, NULL, NULL, dentry);
-	if (rc == -EINVAL) {
+	if (rc == -EINVAL && inode) {
 		cifs_dbg(FYI, "invalid lease key, resending request without lease");
 		rc = smb2_compound_op(xid, tcon, cifs_sb, name, &oparms,
 				      NULL, &(int){SMB2_OP_UNLINK},
@@ -1373,6 +1366,20 @@ smb2_unlink(const unsigned int xid, struct cifs_tcon *tcon, const char *name,
 	if (!rc && inode)
 		cifs_mark_open_handles_for_deleted_file(inode, name);
 	return rc;
+}
+
+int
+smb2_rmdir(const unsigned int xid, struct cifs_tcon *tcon, const char *name,
+	   struct cifs_sb_info *cifs_sb)
+{
+	return smb2_remove(xid, tcon, name, cifs_sb, NULL, true /* is_dir */);
+}
+
+int
+smb2_unlink(const unsigned int xid, struct cifs_tcon *tcon, const char *name,
+	    struct cifs_sb_info *cifs_sb, struct dentry *dentry)
+{
+	return smb2_remove(xid, tcon, name, cifs_sb, dentry, false /* is_dir */);
 }
 
 static int smb2_set_path_attr(const unsigned int xid, struct cifs_tcon *tcon,
