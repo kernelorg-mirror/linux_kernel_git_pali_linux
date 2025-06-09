@@ -1179,7 +1179,8 @@ smb2_query_eas(const unsigned int xid, struct cifs_tcon *tcon,
 
 static int
 smb2_set_ea(const unsigned int xid, struct cifs_tcon *tcon,
-	    const char *path, const char *ea_name, const void *ea_value,
+	    const char *path, bool open_reparse_point,
+	    const char *ea_name, const void *ea_value,
 	    const __u16 ea_value_len, const struct nls_table *nls_codepage,
 	    struct cifs_sb_info *cifs_sb)
 {
@@ -1281,7 +1282,8 @@ replay_again:
 		.path = path,
 		.desired_access = FILE_WRITE_EA,
 		.disposition = FILE_OPEN,
-		.create_options = cifs_create_options(cifs_sb, 0),
+		.create_options = cifs_create_options(cifs_sb,
+				open_reparse_point ? OPEN_REPARSE_POINT : 0),
 		.fid = &fid,
 		.replay = !!(retries),
 	};

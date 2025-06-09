@@ -570,6 +570,7 @@ struct smb_version_operations {
 			const unsigned char *, const unsigned char *, char *,
 			size_t, struct cifs_sb_info *);
 	int (*set_EA)(const unsigned int, struct cifs_tcon *, const char *,
+			bool open_reparse_point,
 			const char *, const void *, const __u16,
 			const struct nls_table *, struct cifs_sb_info *);
 	struct smb_ntsd * (*get_acl)(struct cifs_sb_info *cifssb, struct inode *ino,

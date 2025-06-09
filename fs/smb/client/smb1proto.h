@@ -209,7 +209,8 @@ ssize_t CIFSSMBQAllEAs(const unsigned int xid, struct cifs_tcon *tcon,
 		       const unsigned char *ea_name, char *EAData,
 		       size_t buf_size, struct cifs_sb_info *cifs_sb);
 int CIFSSMBSetEA(const unsigned int xid, struct cifs_tcon *tcon,
-		 const char *fileName, const char *ea_name,
+		 const char *fileName, bool open_reparse_point,
+		 const char *ea_name,
 		 const void *ea_value, const __u16 ea_value_len,
 		 const struct nls_table *nls_codepage,
 		 struct cifs_sb_info *cifs_sb);

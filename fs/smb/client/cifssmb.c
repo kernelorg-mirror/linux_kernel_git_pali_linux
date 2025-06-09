@@ -3144,6 +3144,7 @@ struct inode *cifs_create_reparse_inode(struct cifs_open_info_data *data,
 			rc = CIFSSMBSetEA(xid,
 					  tcon,
 					  full_path,
+					  true /* open reparse point */,
 					  &ea->ea_data[0],
 					  &ea->ea_data[ea->ea_name_length+1],
 					  le16_to_cpu(ea->ea_value_length),
@@ -6291,7 +6292,8 @@ QAllEAsOut:
 
 int
 CIFSSMBSetEA(const unsigned int xid, struct cifs_tcon *tcon,
-	     const char *fileName, const char *ea_name, const void *ea_value,
+	     const char *fileName, bool open_reparse_point,
+	     const char *ea_name, const void *ea_value,
 	     const __u16 ea_value_len, const struct nls_table *nls_codepage,
 	     struct cifs_sb_info *cifs_sb)
 {
@@ -6304,6 +6306,22 @@ CIFSSMBSetEA(const unsigned int xid, struct cifs_tcon *tcon,
 	int bytes_returned = 0;
 	__u16 params, param_offset, byte_count, offset, count;
 	int remap = cifs_remap(cifs_sb);
+
+	/*
+	 * On NT systems which supports reparse points, the TRANS2_SET_PATH_INFORMATION
+	 * operates on the reparse point itself and not the path location where reparse
+	 * point redirects. So the behavior of TRANS2_SET_PATH_INFORMATION is as if the
+	 * path was opened with OPEN_REPARSE_POINT flag. Hence this SMB1 SetEA function
+	 * implements only the behavior of "open_reparse_point=true" parameter.
+	 *
+	 * TODO: Implement "open_reparse_point=false" support for SMB1 SetEA. For this
+	 * is needed to call NT OPEN without OPEN_REPARSE_POINT flag and then call
+	 * TRANS2_SET_FILE_INFORMATION.
+	 *
+	 * On systems which do not support reparse points, the behavior of both
+	 * "open_reparse_point=true" and "open_reparse_point=false" is same.
+	 */
+	(void)open_reparse_point;
 
 	cifs_dbg(FYI, "In SetEA\n");
 SetEARetry:
